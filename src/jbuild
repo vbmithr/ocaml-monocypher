@@ -1,0 +1,8 @@
+(jbuild_version 1)
+
+(library
+ ((name            monocypher)
+  (public_name     monocypher)
+  (libraries       (bigstring ocplib-endian.bigstring zarith))
+  (c_names         (sha512 monocypher_stubs))
+  (c_flags         (-DED25519_SHA512 -O3))))
