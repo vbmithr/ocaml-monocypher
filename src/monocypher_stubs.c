@@ -1846,3 +1846,18 @@ CAMLprim value caml_monocypher_getrandom(value buf, value buflen) {
     }
     return Val_long(0);
 }
+
+CAMLprim value caml_monocypher_crypto_wipe(value buf, value buflen) {
+    crypto_wipe(Caml_ba_data_val(buf), Long_val(buflen));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_verify16(value a, value b) {
+    return Val_int(crypto_verify16(Caml_ba_data_val(a), Caml_ba_data_val(b)));
+}
+CAMLprim value caml_monocypher_crypto_verify32(value a, value b) {
+    return Val_int(crypto_verify32(Caml_ba_data_val(a), Caml_ba_data_val(b)));
+}
+CAMLprim value caml_monocypher_crypto_verify64(value a, value b) {
+    return Val_int(crypto_verify64(Caml_ba_data_val(a), Caml_ba_data_val(b)));
+}

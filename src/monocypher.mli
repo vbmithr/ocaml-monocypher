@@ -3,6 +3,16 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+(** {1 Memory Wipe} *)
+
+val wipe : ?len:int -> Bigstring.t -> unit
+
+(** {1 Constant Time Comparison} *)
+
+val equal16 : Bigstring.t -> Bigstring.t -> bool
+val equal32 : Bigstring.t -> Bigstring.t -> bool
+val equal64 : Bigstring.t -> Bigstring.t -> bool
+
 module Rand : sig
   val gen : int -> Bigstring.t
   val write : ?len:int -> Bigstring.t -> int
