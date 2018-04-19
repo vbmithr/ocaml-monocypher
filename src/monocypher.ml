@@ -3,7 +3,28 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+module Rand = struct
+  external getrandom : Bigstring.t -> int -> int =
+    "caml_monocypher_getrandom" [@@noalloc]
 
+  let gen buflen =
+    let buf = Bigstring.create buflen in
+    let nb_written = getrandom buf buflen in
+    if nb_written <> buflen then
+      invalid_arg "Rand.gen: RNG failed" ;
+    buf
+
+  let write ?len buf =
+    let buflen = Bigstring.length buf in
+    let len = match len with
+      | None -> buflen
+      | Some l when l < 0 ->
+        invalid_arg (Printf.sprintf "Rand.write: len=%d is negative" l)
+      | Some l when l > buflen ->
+        invalid_arg (Printf.sprintf "Rand.write: len=%d > buflen=%d " l buflen)
+      | Some l -> l in
+    getrandom buf len
+end
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
 

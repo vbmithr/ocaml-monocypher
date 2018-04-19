@@ -1828,3 +1828,21 @@ int crypto_unlock(u8       *plain_text,
     return crypto_unlock_aead(plain_text, key, nonce, mac, 0, 0,
                               cipher_text, text_size);
 }
+
+/////////////////////////////
+/// Custom and OCaml code ///
+/////////////////////////////
+
+#include <caml/mlvalues.h>
+#include <caml/memory.h>
+#include <caml/alloc.h>
+#include <caml/bigarray.h>
+#include "platform-specific.h"
+
+CAMLprim value caml_monocypher_getrandom(value buf, value buflen) {
+    if (default_RNG_defined) {
+        int ret = default_RNG(Caml_ba_data_val(buf), Long_val(buflen));
+        return (ret ? buflen : Val_long(0));
+    }
+    return Val_long(0);
+}

@@ -3,6 +3,10 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+module Rand : sig
+  val gen : int -> Bigstring.t
+  val write : ?len:int -> Bigstring.t -> int
+end
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
