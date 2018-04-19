@@ -59,6 +59,13 @@ module Rand = struct
     getrandom buf len
 end
 
+module Hash = struct
+  module Blake2b = struct
+  end
+  module SHA512 = struct
+  end
+end
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
 

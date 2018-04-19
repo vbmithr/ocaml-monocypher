@@ -13,6 +13,8 @@ val equal16 : Bigstring.t -> Bigstring.t -> bool
 val equal32 : Bigstring.t -> Bigstring.t -> bool
 val equal64 : Bigstring.t -> Bigstring.t -> bool
 
+(** {1 Random Number Generation } *)
+
 module Rand : sig
   val gen : int -> Bigstring.t
   val write : ?len:int -> Bigstring.t -> int
