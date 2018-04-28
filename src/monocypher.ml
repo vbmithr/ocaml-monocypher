@@ -61,6 +61,47 @@ end
 
 module Hash = struct
   module Blake2b = struct
+    external sizeof_ctx : unit -> int =
+      "caml_monocypher_sizeof_crypto_blake2b_ctx" [@@noalloc]
+
+    external hash_size : Bigstring.t -> int =
+      "caml_monocypher_crypto_blake2b_ctx_hash_size" [@@noalloc]
+
+    external init : Bigstring.t -> int -> Bigstring.t -> unit =
+      "caml_monocypher_crypto_blake2b_general_init" [@@noalloc]
+
+    external update : Bigstring.t -> Bigstring.t -> unit =
+      "caml_monocypher_crypto_blake2b_update" [@@noalloc]
+
+    external final : Bigstring.t -> Bigstring.t -> unit =
+      "caml_monocypher_crypto_blake2b_final" [@@noalloc]
+
+    type ctx = Bigstring.t
+
+    let ctxlen = sizeof_ctx ()
+
+    let init ?(key=Bigstring.empty) len =
+      if len < 1 || len > 64 then
+        invalid_arg (Printf.sprintf "Hash.Blake2b.init: invalid hash \
+                                     size (%d)" len) ;
+      let ctx = Bigstring.create ctxlen in
+      init ctx len key ;
+      ctx
+
+    let blit_final ctx buf =
+      let len = hash_size ctx in
+      if Bigstring.length buf < len then
+        invalid_arg (Printf.sprintf "Hash.Blake2b.blit_final: buffer \
+                                     is less than %d bytes" len) ;
+      let len = hash_size ctx in
+      final ctx buf ;
+      len
+
+    let final ctx =
+      let hash = Bigstring.create (hash_size ctx) in
+      final ctx hash ;
+      hash
+
   end
   module SHA512 = struct
   end

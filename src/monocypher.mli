@@ -20,6 +20,19 @@ module Rand : sig
   val write : ?len:int -> Bigstring.t -> int
 end
 
+module Hash : sig
+  module Blake2b : sig
+    type ctx
+    (** Type of a Blake2b context. Get wiped after a call to
+        [blit_final] or [final]. *)
+
+    val init : ?key:Bigstring.t -> int -> ctx
+    val update : ctx -> Bigstring.t -> unit
+    val blit_final : ctx -> Bigstring.t -> int
+    val final : ctx -> Bigstring.t
+  end
+end
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
 

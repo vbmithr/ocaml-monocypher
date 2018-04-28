@@ -1861,3 +1861,30 @@ CAMLprim value caml_monocypher_crypto_verify32(value a, value b) {
 CAMLprim value caml_monocypher_crypto_verify64(value a, value b) {
     return Val_int(crypto_verify64(Caml_ba_data_val(a), Caml_ba_data_val(b)));
 }
+
+CAMLprim value caml_monocypher_sizeof_crypto_blake2b_ctx(value unit) {
+    return Val_long(sizeof(crypto_blake2b_ctx));
+}
+
+CAMLprim value caml_monocypher_crypto_blake2b_ctx_hash_size(value ctx) {
+    crypto_blake2b_ctx *c = Caml_ba_data_val(ctx);
+    return Val_int(c->hash_size);
+}
+
+CAMLprim value caml_monocypher_crypto_blake2b_general_init(value ctx, value hash_size, value key) {
+    crypto_blake2b_general_init(Caml_ba_data_val(ctx),
+                                Long_val(hash_size),
+                                Caml_ba_data_val(key),
+                                Caml_ba_array_val(key)->dim[0]);
+}
+
+CAMLprim value caml_monocypher_crypto_blake2b_update(value ctx, value msg) {
+    crypto_blake2b_update(Caml_ba_data_val(ctx),
+                          Caml_ba_data_val(msg),
+                          Caml_ba_array_val(msg)->dim[0]);
+}
+
+CAMLprim value caml_monocypher_crypto_blake2b_final(value ctx, value hash) {
+    crypto_blake2b_final(Caml_ba_data_val(ctx),
+                         Caml_ba_data_val(hash));
+}

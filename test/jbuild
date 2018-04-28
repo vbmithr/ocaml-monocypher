@@ -2,7 +2,7 @@
 
 (executable
  ((name test)
-  (libraries (hex monocypher alcotest))))
+  (libraries (monocypher alcotest hex))))
 
 (alias
  ((name    runtest)
