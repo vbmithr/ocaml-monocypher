@@ -69,6 +69,51 @@ let test_blake2b_key () =
   let hash = Hash.Blake2b.final ctx in
   Alcotest.check bigstring "final" expected_hash_key hash
 
+let test_argon2i () =
+  let password = Rand.gen 10 in
+  let salt = Rand.gen 16 in
+  let hashlen = 64 in
+  let hash = Bigstring.create hashlen in
+  let nb_written = Pwhash.argon2i ~password ~salt hash in
+  Alcotest.(check int "argon2i" hashlen nb_written)
+
+let test_dh () =
+  let sk = DH.sk_of_bytes (Rand.gen DH.bytes) in
+  let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
+  let pk = DH.neuterize sk in
+  let pk2 = DH.neuterize sk2 in
+  let k = DH.shared_exn sk pk2 in
+  let k2 = DH.shared_exn sk2 pk in
+  Alcotest.(check bool "dh" true DH.(equal k k2))
+
+let test_box () =
+  let sk = DH.sk_of_bytes (Rand.gen DH.bytes) in
+  let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
+  let pk2 = DH.neuterize sk2 in
+  let k = DH.shared_exn sk pk2 in
+  let k = DH.buffer k in
+  let key = Box.key_of_bytes k in
+  let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?" in
+  let msglen = Bigstring.length msg in
+  let buf = Bigstring.init (msglen + Box.macbytes) (fun _ -> '\x00') in
+  let nonce = Rand.gen Box.noncebytes in
+  Bigstring.blit msg 0 buf Box.macbytes msglen ;
+  Box.lock ~key ~nonce buf ;
+  let res = Box.unlock ~key ~nonce buf in
+  Alcotest.(check bool "box decoded ok" true res) ;
+  Alcotest.(check bigstring "msg ok" msg (Bigstring.sub buf Box.macbytes msglen))
+
+let test_sign () =
+  let sk = Rand.gen Sign.skbytes in
+  let sk = Sign.sk_of_bytes sk in
+  let pk = Sign.neuterize sk in
+  let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?" in
+  let signature = Bigstring.create Sign.bytes in
+  let nb_written = Sign.sign ~pk ~sk ~msg signature in
+  Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
+  Alcotest.(check bool "sign check" true (Sign.check ~pk ~msg signature)) ;
+  ()
+
 let basic = [
   "Rand.gen", `Quick, test_rand_gen ;
   "Rand.write", `Quick, test_rand_write ;
@@ -79,6 +124,10 @@ let basic = [
   "blake2b", `Quick, test_blake2b ;
   "blake2b_blit", `Quick, test_blake2b_blit ;
   "blake2b_key", `Quick, test_blake2b_key ;
+  "argon2i", `Quick, test_argon2i ;
+  "dh", `Quick, test_dh ;
+  "box", `Quick, test_box ;
+  "sign", `Quick, test_sign ;
 ]
 
 let () =

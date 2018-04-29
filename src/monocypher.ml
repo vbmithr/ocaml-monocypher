@@ -107,6 +107,195 @@ module Hash = struct
   end
 end
 
+module Pwhash = struct
+  external argon2i :
+    Bigstring.t -> Bigstring.t -> int -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_argon2i" [@@noalloc]
+
+  let argon2i ?(nb_blocks=100_000) ?(nb_iter=3) ~password ~salt buf =
+    let buflen = Bigstring.length buf in
+    if buflen <> 16 && buflen <> 32 && buflen <> 64 then
+      invalid_arg (Printf.sprintf "Pwhash.argon2i: buflen (%d) must be \
+                                   either 16, 32, or 64" buflen) ;
+    let saltlen = Bigstring.length salt in
+    if saltlen < 8 then
+      invalid_arg (Printf.sprintf "Pwhash.argon2i: salt (%d) must be \
+                                   at least 8 bytes" saltlen) ;
+    let work = Bigstring.create (nb_blocks * 1024) in
+    argon2i buf work nb_iter password salt ;
+    buflen
+end
+
+type secret
+type public
+
+module DH = struct
+  external neuterize : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_key_exchange_public_key" [@@noalloc]
+
+  external exchange : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
+    "caml_monocypher_crypto_key_exchange" [@@noalloc]
+
+  type shared
+  type _ key =
+    | K  : Bigstring.t -> shared key
+    | Sk : Bigstring.t -> secret key
+    | Pk : Bigstring.t -> public key
+
+  let bytes = 32
+
+  let buffer : type a. a key -> Bigstring.t = function
+    | K  buf -> buf
+    | Sk buf -> buf
+    | Pk buf -> buf
+
+  let wipe : type a. a key -> unit = function
+    | K  buf -> wipe buf
+    | Sk buf -> wipe buf
+    | Pk buf -> wipe buf
+
+  let equal : type a. a key -> a key -> bool = fun a b ->
+    match a, b with
+    | K a, K b -> Bigstring.equal a b
+    | Sk a, Sk b -> Bigstring.equal a b
+    | Pk a, Pk b -> Bigstring.equal a b
+
+  let neuterize : type a. a key -> public key = function
+    | K _ -> invalid_arg "DH.neuterize: shared key cannot be neuterized"
+    | Pk pk -> Pk pk
+    | Sk sk ->
+      let pk = Bigstring.create bytes in
+      neuterize pk sk ;
+      Pk pk
+
+  let sk_of_bytes ?(pos=0) buf =
+    let buflen = Bigstring.length buf in
+    if pos < 0 || buflen - pos < bytes then
+      invalid_arg (Printf.sprintf "DH.sk_of_bytes: buffer (len = %d) \
+                                   must be at least %d bytes" buflen bytes) ;
+    let sk = Bigstring.create bytes in
+    Bigstring.blit buf pos sk 0 bytes ;
+    Sk sk
+
+  let shared (Sk sk) (Pk pk) =
+    let k = Bigstring.create bytes in
+    match exchange k sk pk with
+    | 0 -> Some (K k)
+    | _ -> None
+
+  let shared_exn sk pk =
+    match shared sk pk with
+    | None -> invalid_arg "DH.shared_exn"
+    | Some k -> k
+
+  let blit : type a. a key -> Bigstring.t -> int -> int = fun k buf pos ->
+    begin match k with
+    | K k -> Bigstring.blit k 0 buf pos bytes
+    | Pk pk -> Bigstring.blit pk 0 buf pos bytes
+    | Sk sk -> Bigstring.blit sk 0 buf pos bytes
+    end ;
+    bytes
+end
+
+module Box = struct
+  external lock : Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_lock" [@@noalloc]
+
+  external unlock : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
+    "caml_monocypher_crypto_lock" [@@noalloc]
+
+  type key = Bigstring.t
+
+  let bytes = 32
+  let noncebytes = 24
+  let macbytes = 16
+
+  let key_of_bytes ?(pos=0) buf =
+    let buflen = Bigstring.length buf in
+    if pos < 0 || buflen - pos < bytes then
+      invalid_arg (Printf.sprintf "Box.key_of_bytes: buffer (len = %d) must be at \
+                                   least %d bytes" buflen bytes) ;
+    let k = Bigstring.create bytes in
+    Bigstring.blit buf pos k 0 bytes ;
+    k
+
+  let wipe k = wipe k
+
+  let lock ~key ~nonce buf =
+    lock buf key nonce
+
+  let unlock ~key ~nonce buf =
+    match unlock buf key nonce with
+    | 0 -> true
+    | _ -> false
+end
+
+module Sign = struct
+  external neuterize : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_public_key" [@@noalloc]
+
+  external sign :
+    Bigstring.t -> Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign" [@@noalloc]
+
+  external check : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
+    "caml_monocypher_crypto_check" [@@noalloc]
+
+  type _ key =
+    | Sk : Bigstring.t -> secret key
+    | Pk : Bigstring.t -> public key
+
+  let equal : type a. a key -> a key -> bool = fun a b ->
+    match a, b with
+    | Sk a, Sk b -> Bigstring.equal a b
+    | Pk a, Pk b -> Bigstring.equal a b
+
+  let buffer : type a. a key -> Bigstring.t = function
+    | Sk buf -> buf
+    | Pk buf -> buf
+
+  let wipe : type a. a key -> unit = function
+    | Sk buf -> wipe buf
+    | Pk buf -> wipe buf
+
+  let bytes = 64
+  let skbytes = 32
+  let pkbytes = 32
+
+  let sk_of_bytes ?(pos=0) buf =
+    let buflen = Bigstring.length buf in
+    if pos < 0 || buflen - pos < skbytes then
+      invalid_arg (Printf.sprintf "Sign.sk_of_bytes: buffer (len = %d) \
+                                   must be at least %d bytes" buflen skbytes) ;
+    let sk = Bigstring.create skbytes in
+    Bigstring.blit buf pos sk 0 skbytes ;
+    Sk sk
+
+  let neuterize : type a. a key -> public key = function
+    | Pk pk -> Pk pk
+    | Sk sk ->
+      let pk = Bigstring.create pkbytes in
+      neuterize pk sk ;
+      Pk pk
+
+  let sign ~pk:(Pk pk) ~sk:(Sk sk) ~msg signature =
+    let siglen = Bigstring.length signature in
+    if siglen < bytes then
+      invalid_arg (Printf.sprintf "Sign.sign: signature buffer (len = \
+                                   %d) must be at least %d bytes" siglen bytes) ;
+    sign signature sk pk msg ;
+    bytes
+
+  let check ~pk:(Pk pk) ~msg signature =
+    let siglen = Bigstring.length signature in
+    if siglen < bytes then
+      invalid_arg (Printf.sprintf "Sign.check: signature buffer (len = \
+                                   %d) must be at least %d bytes" siglen bytes) ;
+    match check signature pk msg with
+    | 0 -> true
+    | _ -> false
+end
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
 

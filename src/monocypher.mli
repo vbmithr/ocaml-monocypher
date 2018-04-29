@@ -33,6 +33,67 @@ module Hash : sig
   end
 end
 
+module Pwhash : sig
+  val argon2i :
+    ?nb_blocks:int -> ?nb_iter:int ->
+    password:Bigstring.t -> salt:Bigstring.t -> Bigstring.t -> int
+end
+
+type secret
+type public
+
+module DH : sig
+  type shared
+  type _ key
+
+  val bytes : int
+  val equal : 'a key -> 'a key -> bool
+  val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
+  val neuterize : _ key -> public key
+  val shared : secret key -> public key -> shared key option
+  val shared_exn : secret key -> public key -> shared key
+  val wipe : _ key -> unit
+
+  val buffer : _ key -> Bigstring.t
+  (** [buffer k] is [k]'s internal buffer. DO NOT MODIFY. *)
+
+  val blit : _ key -> Bigstring.t -> int -> int
+end
+
+module Box : sig
+  type key
+
+  val bytes : int
+  val noncebytes : int
+  val macbytes : int
+
+  val key_of_bytes : ?pos:int -> Bigstring.t -> key
+  val wipe : key -> unit
+
+  val lock : key:key -> nonce:Bigstring.t -> Bigstring.t -> unit
+  val unlock : key:key -> nonce:Bigstring.t -> Bigstring.t -> bool
+end
+
+module Sign : sig
+  type _ key
+
+  val bytes : int
+  val skbytes : int
+  val pkbytes : int
+
+  val equal : 'a key -> 'a key -> bool
+  val wipe : _ key -> unit
+
+  val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
+  val neuterize : _ key -> public key
+
+  val sign :
+    pk:public key -> sk:secret key -> msg:Bigstring.t -> Bigstring.t -> int
+
+  val check :
+    pk:public key -> msg:Bigstring.t -> Bigstring.t -> bool
+end
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2017 Vincent Bernardoff
 

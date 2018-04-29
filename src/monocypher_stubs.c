@@ -1876,15 +1876,87 @@ CAMLprim value caml_monocypher_crypto_blake2b_general_init(value ctx, value hash
                                 Long_val(hash_size),
                                 Caml_ba_data_val(key),
                                 Caml_ba_array_val(key)->dim[0]);
+    return Val_unit;
 }
 
 CAMLprim value caml_monocypher_crypto_blake2b_update(value ctx, value msg) {
     crypto_blake2b_update(Caml_ba_data_val(ctx),
                           Caml_ba_data_val(msg),
                           Caml_ba_array_val(msg)->dim[0]);
+    return Val_unit;
 }
 
 CAMLprim value caml_monocypher_crypto_blake2b_final(value ctx, value hash) {
     crypto_blake2b_final(Caml_ba_data_val(ctx),
                          Caml_ba_data_val(hash));
+    return Val_unit;
 }
+
+CAMLprim value caml_monocypher_crypto_argon2i(value hash, value work, value nb_iter,
+                                              value passwd, value salt) {
+    crypto_argon2i(Caml_ba_data_val(hash),
+                   Caml_ba_array_val(hash)->dim[0],
+                   Caml_ba_data_val(work),
+                   Caml_ba_array_val(work)->dim[0] / 1024,
+                   Int_val(nb_iter),
+                   Caml_ba_data_val(passwd),
+                   Caml_ba_array_val(passwd)->dim[0],
+                   Caml_ba_data_val(salt),
+                   Caml_ba_array_val(salt)->dim[0]);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_key_exchange_public_key(value pk, value sk) {
+    crypto_key_exchange_public_key(Caml_ba_data_val(pk),
+                                   Caml_ba_data_val(sk));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_key_exchange(value k, value sk, value pk) {
+    return Val_int(crypto_key_exchange(Caml_ba_data_val(k),
+                                       Caml_ba_data_val(sk),
+                                       Caml_ba_data_val(pk)));
+}
+
+CAMLprim value caml_monocypher_crypto_lock(value cmsg, value key, value nonce) {
+    crypto_lock(Caml_ba_data_val(cmsg),
+                Caml_ba_data_val(cmsg) + 16,
+                Caml_ba_data_val(key),
+                Caml_ba_data_val(nonce),
+                Caml_ba_data_val(cmsg) + 16,
+                Caml_ba_array_val(cmsg)->dim[0] - 16);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_unlock(value msg, value key, value nonce) {
+    return Val_int(crypto_unlock(Caml_ba_data_val(msg) + 16,
+                                 Caml_ba_data_val(key),
+                                 Caml_ba_data_val(nonce),
+                                 Caml_ba_data_val(msg),
+                                 Caml_ba_data_val(msg) + 16,
+                                 Caml_ba_array_val(msg)->dim[0] - 16));
+}
+
+CAMLprim value caml_monocypher_crypto_sign_public_key(value pk, value sk) {
+    crypto_sign_public_key(Caml_ba_data_val(pk),
+                           Caml_ba_data_val(sk));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_sign(value signature, value sk, value pk, value msg) {
+    crypto_sign(Caml_ba_data_val(signature),
+                Caml_ba_data_val(sk),
+                Caml_ba_data_val(pk),
+                Caml_ba_data_val(msg),
+                Caml_ba_array_val(msg)->dim[0]);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_check(value signature, value pk, value msg) {
+    return Val_int(crypto_check(Caml_ba_data_val(signature),
+                                Caml_ba_data_val(pk),
+                                Caml_ba_data_val(msg),
+                                Caml_ba_array_val(msg)->dim[0]));
+}
+
+
