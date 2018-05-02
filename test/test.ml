@@ -86,6 +86,9 @@ let test_dh () =
   let k2 = DH.shared_exn sk2 pk in
   Alcotest.(check bool "dh" true DH.(equal k k2))
 
+let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?"
+let msg_gen () = Bigstring.lines_gen msg
+
 let test_box () =
   let sk = DH.sk_of_bytes (Rand.gen DH.bytes) in
   let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
@@ -93,7 +96,6 @@ let test_box () =
   let k = DH.shared_exn sk pk2 in
   let k = DH.buffer k in
   let key = Box.key_of_bytes k in
-  let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?" in
   let msglen = Bigstring.length msg in
   let buf = Bigstring.init (msglen + Box.macbytes) (fun _ -> '\x00') in
   let nonce = Rand.gen Box.noncebytes in
@@ -107,11 +109,13 @@ let test_sign () =
   let sk = Rand.gen Sign.skbytes in
   let sk = Sign.sk_of_bytes sk in
   let pk = Sign.neuterize sk in
-  let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?" in
   let signature = Bigstring.create Sign.bytes in
   let nb_written = Sign.sign ~pk ~sk ~msg signature in
   Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
   Alcotest.(check bool "sign check" true (Sign.check ~pk ~msg signature)) ;
+  let nb_written = Sign.sign_gen ~pk ~sk msg_gen signature in
+  Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
+  Alcotest.(check bool "sign check" true (Sign.check_gen ~pk (msg_gen ()) signature)) ;
   ()
 
 let test_comm () =

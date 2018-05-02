@@ -1943,20 +1943,55 @@ CAMLprim value caml_monocypher_crypto_sign_public_key(value pk, value sk) {
     return Val_unit;
 }
 
-CAMLprim value caml_monocypher_crypto_sign(value signature, value sk, value pk, value msg) {
-    crypto_sign(Caml_ba_data_val(signature),
-                Caml_ba_data_val(sk),
-                Caml_ba_data_val(pk),
-                Caml_ba_data_val(msg),
-                Caml_ba_array_val(msg)->dim[0]);
+CAMLprim value caml_monocypher_sizeof_crypto_sign_ctx(value unit) {
+    return Val_int(sizeof(crypto_sign_ctx));
+}
+
+CAMLprim value caml_monocypher_crypto_sign_init_first_pass(value ctx, value sk, value pk) {
+    crypto_sign_init_first_pass(Caml_ba_data_val(ctx),
+                                Caml_ba_data_val(sk),
+                                Caml_ba_data_val(pk));
     return Val_unit;
 }
 
-CAMLprim value caml_monocypher_crypto_check(value signature, value pk, value msg) {
-    return Val_int(crypto_check(Caml_ba_data_val(signature),
-                                Caml_ba_data_val(pk),
-                                Caml_ba_data_val(msg),
-                                Caml_ba_array_val(msg)->dim[0]));
+CAMLprim value caml_monocypher_crypto_sign_update(value ctx, value msg) {
+    crypto_sign_update(Caml_ba_data_val(ctx),
+                       Caml_ba_data_val(msg),
+                       Caml_ba_array_val(msg)->dim[0]);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_sign_init_second_pass(value ctx) {
+    crypto_sign_init_second_pass(Caml_ba_data_val(ctx));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_sign_final(value ctx, value signature) {
+    crypto_sign_final(Caml_ba_data_val(ctx),
+                      Caml_ba_data_val(signature));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_sizeof_crypto_check_ctx(value unit) {
+    return Val_int(sizeof(crypto_check_ctx));
+}
+
+CAMLprim value caml_monocypher_crypto_check_init(value ctx, value signature, value pk) {
+    crypto_check_init(Caml_ba_data_val(ctx),
+                      Caml_ba_data_val(signature),
+                      Caml_ba_data_val(pk));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_check_update(value ctx, value msg) {
+    crypto_check_update(Caml_ba_data_val(ctx),
+                        Caml_ba_data_val(msg),
+                        Caml_ba_array_val(msg)->dim[0]);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_check_final(value ctx) {
+    return Val_int(crypto_check_final(Caml_ba_data_val(ctx)));
 }
 
 // Variable time! s must not be secret!

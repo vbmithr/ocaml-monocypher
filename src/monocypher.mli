@@ -92,8 +92,14 @@ module Sign : sig
   val sign :
     pk:public key -> sk:secret key -> msg:Bigstring.t -> Bigstring.t -> int
 
+  val sign_gen :
+    pk:public key -> sk:secret key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
+
   val check :
     pk:public key -> msg:Bigstring.t -> Bigstring.t -> bool
+
+  val check_gen :
+    pk:public key -> Bigstring.t Gen.t -> Bigstring.t -> bool
 end
 
 module Ed25519 : sig

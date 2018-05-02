@@ -234,12 +234,39 @@ module Sign = struct
   external neuterize : Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_sign_public_key" [@@noalloc]
 
-  external sign :
-    Bigstring.t -> Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign" [@@noalloc]
+  external sizeof_sign_ctx : unit -> int =
+    "caml_monocypher_sizeof_crypto_sign_ctx" [@@noalloc]
 
-  external check : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
-    "caml_monocypher_crypto_check" [@@noalloc]
+  external sizeof_check_ctx : unit -> int =
+    "caml_monocypher_sizeof_crypto_check_ctx" [@@noalloc]
+
+  let sign_ctx_bytes = sizeof_sign_ctx ()
+  let check_ctx_bytes = sizeof_check_ctx ()
+
+  external sign_init_first_pass :
+    Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_init_first_pass" [@@noalloc]
+
+  external sign_init_second_pass :
+    Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_init_second_pass" [@@noalloc]
+
+  external sign_update :
+    Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_update" [@@noalloc]
+
+  external sign_final :
+    Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_final" [@@noalloc]
+
+  external check_init : Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_check_init" [@@noalloc]
+
+  external check_update : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_check_update" [@@noalloc]
+
+  external check_final : Bigstring.t -> int =
+    "caml_monocypher_crypto_check_final" [@@noalloc]
 
   type _ key =
     | Sk : Bigstring.t -> secret key
@@ -284,22 +311,36 @@ module Sign = struct
       neuterize pk sk ;
       Pk pk
 
-  let sign ~pk:(Pk pk) ~sk:(Sk sk) ~msg signature =
+  let sign_gen ~pk:(Pk pk) ~sk:(Sk sk) g signature =
     let siglen = Bigstring.length signature in
     if siglen < bytes then
       invalid_arg (Printf.sprintf "Sign.sign: signature buffer (len = \
                                    %d) must be at least %d bytes" siglen bytes) ;
-    sign signature sk pk msg ;
+    let ctx = Bigstring.create sign_ctx_bytes in
+    sign_init_first_pass ctx sk pk ;
+    Gen.iter (sign_update ctx) (g ()) ;
+    sign_init_second_pass ctx ;
+    Gen.iter (sign_update ctx) (g ()) ;
+    sign_final ctx signature ;
     bytes
 
-  let check ~pk:(Pk pk) ~msg signature =
+  let sign ~pk ~sk ~msg signature =
+    sign_gen ~pk ~sk (Gen.Restart.return msg) signature
+
+  let check_gen ~pk:(Pk pk) g signature =
     let siglen = Bigstring.length signature in
     if siglen < bytes then
       invalid_arg (Printf.sprintf "Sign.check: signature buffer (len = \
                                    %d) must be at least %d bytes" siglen bytes) ;
-    match check signature pk msg with
+    let ctx = Bigstring.create check_ctx_bytes in
+    check_init ctx signature pk ;
+    Gen.iter (check_update ctx) g ;
+    match check_final ctx with
     | 0 -> true
     | _ -> false
+
+  let check ~pk ~msg signature =
+    check_gen ~pk (Gen.return msg) signature
 end
 
 module Ed25519 = struct
