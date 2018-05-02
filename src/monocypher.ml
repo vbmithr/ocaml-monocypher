@@ -271,6 +271,12 @@ module Sign = struct
     Bigstring.blit buf pos sk 0 skbytes ;
     Sk sk
 
+  let blit : type a. a key -> Bigstring.t -> int -> int = fun k buf pos ->
+    begin match k with
+    | Sk sk -> Bigstring.blit sk 0 buf pos skbytes ; skbytes
+    | Pk pk -> Bigstring.blit pk 0 buf pos pkbytes ; pkbytes
+    end
+
   let neuterize : type a. a key -> public key = function
     | Pk pk -> Pk pk
     | Sk sk ->
@@ -294,6 +300,80 @@ module Sign = struct
     match check signature pk msg with
     | 0 -> true
     | _ -> false
+end
+
+module Ed25519 = struct
+  type t = Bigstring.t
+
+  let bytes = 32
+  let fe_bytes = 10 * 4
+  let ge_bytes = 4 * fe_bytes
+
+  external of_bytes : Bigstring.t -> Bigstring.t -> int =
+    "caml_monocypher_ge_frombytes" [@@noalloc]
+
+  external to_bytes : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_ge_tobytes" [@@noalloc]
+
+  let of_pk (Sign.Pk pk) =
+    let ge = Bigstring.create ge_bytes in
+    ignore (of_bytes ge pk) ;
+    ge
+
+  let of_bytes buf =
+    let ge = Bigstring.create ge_bytes in
+    match of_bytes ge buf with
+    | 0 -> Some ge
+    | _ -> None
+
+  let blit ge buf =
+    let buflen = Bigstring.length buf in
+    if buflen < bytes then
+      invalid_arg (Printf.sprintf "Ed25519.blit: output buffer (len = \
+                                   %d) must be at least %d bytes" buflen bytes) ;
+    to_bytes buf ge ;
+    bytes
+
+  let to_bytes ge =
+    let buf = Bigstring.create bytes in
+    ignore (blit ge buf) ;
+    buf
+
+  external add : t -> t -> t -> unit =
+    "caml_monocypher_ge_add" [@@noalloc]
+
+  external scalarmult : t -> t -> Bigstring.t -> unit =
+    "caml_monocypher_ge_scalarmult" [@@noalloc]
+
+  external scalarmult_base : t -> Bigstring.t -> unit =
+    "caml_monocypher_ge_scalarmult_base" [@@noalloc]
+
+  let add p q =
+    let ge = Bigstring.create ge_bytes in
+    add ge p q ;
+    ge
+
+  let blit_z z buf =
+    Bigstring.fill buf '\x00' ;
+    if Z.sign z < 1 || Z.numbits z > 256 then
+      invalid_arg (Format.asprintf "blit_z: argument (%a) must be \
+                                    positive and less than 2^256" Z.pp_print z);
+    let bits = Z.to_bits z in
+    Bigstring.blit_of_string bits 0 buf 0 (String.length bits)
+
+  let scalarmult p z =
+    let ge = Bigstring.create ge_bytes in
+    let z_buf = Bigstring.create 32 in
+    blit_z z z_buf ;
+    scalarmult ge p z_buf ;
+    ge
+
+  let scalarmult_base z =
+    let ge = Bigstring.create ge_bytes in
+    let z_buf = Bigstring.create 32 in
+    blit_z z z_buf ;
+    scalarmult_base ge z_buf ;
+    ge
 end
 
 (*---------------------------------------------------------------------------

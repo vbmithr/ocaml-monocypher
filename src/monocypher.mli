@@ -23,7 +23,7 @@ end
 module Hash : sig
   module Blake2b : sig
     type ctx
-    (** Type of a Blake2b context. Get wiped after a call to
+    (** Type of a Blake2b context. Gets wiped after a call to
         [blit_final] or [final]. *)
 
     val init : ?key:Bigstring.t -> int -> ctx
@@ -87,11 +87,38 @@ module Sign : sig
   val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
   val neuterize : _ key -> public key
 
+  val blit : _ key -> Bigstring.t -> int -> int
+
   val sign :
     pk:public key -> sk:secret key -> msg:Bigstring.t -> Bigstring.t -> int
 
   val check :
     pk:public key -> msg:Bigstring.t -> Bigstring.t -> bool
+end
+
+module Ed25519 : sig
+  type t
+  (** Type of a point on the Ed25519 curve. *)
+
+  val bytes : int
+  val of_pk : public Sign.key -> t
+
+  val of_bytes : Bigstring.t -> t option
+  (** [of_bytes buf] is [Some t] iff [buf] is at least 32 bytes long
+      and whose first 32 bytes is a valid compressed serialization of a
+      point, and [None] otherwise. *)
+
+  val blit : t -> Bigstring.t -> int
+  (** [blit t buf] blits the compressed serialization of [t] in [buf]
+      and returns [32], the length of a compressed point. *)
+
+  val to_bytes : t -> Bigstring.t
+  (** [to_bytes t] is a freshly allocated buffer with [t]'s
+      serialization in it. *)
+
+  val add : t -> t -> t
+  val scalarmult : t -> Z.t -> t
+  val scalarmult_base : Z.t -> t
 end
 
 (*---------------------------------------------------------------------------

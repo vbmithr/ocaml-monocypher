@@ -1959,4 +1959,76 @@ CAMLprim value caml_monocypher_crypto_check(value signature, value pk, value msg
                                 Caml_ba_array_val(msg)->dim[0]));
 }
 
+// Variable time! s must not be secret!
+static int ge_frombytes(ge *h, const u8 s[32])
+{
+    static const fe d = {
+        -10913610, 13857413, -15372611, 6949391, 114729,
+        -8787816, -6275908, -3247719, -18696448, -12055116
+    } ;
+    static const fe sqrtm1 = {
+        -32595792, -7943725, 9377950, 3500415, 12389472,
+        -272473, -25146209, -2005654, 326686, 11406482
+    } ;
+    fe u, v, v3, vxx, check;
+    fe_frombytes(h->Y, s);
+    fe_1(h->Z);
+    fe_sq(u, h->Y);            // y^2
+    fe_mul(v, u, d);
+    fe_sub(u, u, h->Z);        // u = y^2-1
+    fe_add(v, v, h->Z);        // v = dy^2+1
 
+    fe_sq(v3, v);
+    fe_mul(v3, v3, v);         // v3 = v^3
+    fe_sq(h->X, v3);
+    fe_mul(h->X, h->X, v);
+    fe_mul(h->X, h->X, u);     // x = uv^7
+
+    fe_pow22523(h->X, h->X);   // x = (uv^7)^((q-5)/8)
+    fe_mul(h->X, h->X, v3);
+    fe_mul(h->X, h->X, u);     // x = uv^3(uv^7)^((q-5)/8)
+
+    fe_sq(vxx, h->X);
+    fe_mul(vxx, vxx, v);
+    fe_sub(check, vxx, u);     // vx^2-u
+    if (fe_isnonzero(check)) {
+        fe_add(check, vxx, u); // vx^2+u
+        if (fe_isnonzero(check)) {
+            return -1;
+        }
+        fe_mul(h->X, h->X, sqrtm1);
+    }
+    fe_mul(h->T, h->X, h->Y);
+    return 0;
+}
+
+CAMLprim value caml_monocypher_ge_frombytes(value h, value s) {
+    return Val_int(ge_frombytes(Caml_ba_data_val(h),
+                                Caml_ba_data_val(s)));
+}
+
+CAMLprim value caml_monocypher_ge_tobytes(value s, value h) {
+    ge_tobytes(Caml_ba_data_val(s),
+               Caml_ba_data_val(h));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_ge_add(value s, value p, value q) {
+    ge_add(Caml_ba_data_val(s),
+           Caml_ba_data_val(p),
+           Caml_ba_data_val(q));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_ge_scalarmult(value p, value q, value scalar) {
+    ge_scalarmult(Caml_ba_data_val(p),
+                  Caml_ba_data_val(q),
+                  Caml_ba_data_val(scalar));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_ge_scalarmult_base(value p, value scalar) {
+    ge_scalarmult_base(Caml_ba_data_val(p),
+                       Caml_ba_data_val(scalar));
+    return Val_unit;
+}
