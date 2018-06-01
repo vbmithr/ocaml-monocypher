@@ -138,6 +138,8 @@ let test_sign_extended () =
   let sk = Sign.sk_of_bytes sk in
   let pk = Sign.neuterize sk in
   let ek = Sign.extend sk in
+  let pk' = Sign.neuterize ek in
+  Alcotest.(check bool "neuterize extended" true (Sign.equal pk pk')) ;
   let signature = Bigstring.create Sign.bytes in
   let nb_written = Sign.sign_extended ~pk ~ek ~msg signature in
   Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
@@ -147,13 +149,23 @@ let test_sign_extended () =
   Alcotest.(check bool "sign check" true (Sign.check_gen ~pk (msg_gen ()) signature)) ;
   ()
 
+let test_keys_step () =
+  let pk = Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
+  let pk_point = Ed25519.of_pk pk in
+  let pk' = Ed25519.to_pk pk_point in
+  Alcotest.(check bool "keys" true (Sign.equal pk pk'))
+
+let test_keys () =
+  for i = 0 to 10 do
+    test_keys_step ()
+  done
+
 let test_comm () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk3 = Ed25519.add pk pk2 in
   let pk3' = Ed25519.add pk2 pk in
-  Alcotest.check bigstring "commutativity"
-    (Ed25519.to_bytes pk3) (Ed25519.to_bytes pk3')
+  Alcotest.(check bool "commutativity" true (Ed25519.equal pk3 pk3'))
 
 let test_assoc () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
@@ -163,22 +175,19 @@ let test_assoc () =
   let sum23 = Ed25519.(add pk2 pk3) in
   let a = Ed25519.add sum12 pk3 in
   let b = Ed25519.add pk sum23 in
-  Alcotest.check bigstring "associativity"
-    (Ed25519.to_bytes a) (Ed25519.to_bytes b)
+  Alcotest.(check bool "associativity" true (Ed25519.equal a b))
 
 let test_arith () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.scalarmult pk (Z.of_int 3) in
   let pk2' = Ed25519.(add (add pk pk) pk) in
-  Alcotest.check bigstring "arith"
-    (Ed25519.to_bytes pk2) (Ed25519.to_bytes pk2')
+  Alcotest.(check bool "arith2" true (Ed25519.equal pk2 pk2'))
 
 let test_arith2 () =
   let a = Ed25519.scalarmult_base (Z.of_int 3) in
   let b = Ed25519.scalarmult a (Z.of_int 2) in
   let b' = Ed25519.scalarmult_base (Z.of_int 6) in
-  Alcotest.check bigstring "arith2"
-    (Ed25519.to_bytes b) (Ed25519.to_bytes b')
+  Alcotest.(check bool "arith2" true (Ed25519.equal b b'))
 
 let basic = [
   "Rand.gen", `Quick, test_rand_gen ;
@@ -196,6 +205,7 @@ let basic = [
   "box", `Quick, test_box ;
   "sign", `Quick, test_sign ;
   "sign_extended", `Quick, test_sign_extended ;
+  "keys", `Quick, test_keys ;
   "commutativity", `Quick, test_comm ;
   "associativity", `Quick, test_assoc ;
   "arith", `Quick, test_arith ;

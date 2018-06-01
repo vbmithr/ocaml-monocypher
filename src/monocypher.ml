@@ -481,8 +481,14 @@ module Ed25519 = struct
 
   let of_pk (Sign.Pk pk) =
     let ge = Bigstring.create ge_bytes in
-    ignore (of_bytes ge pk) ;
-    ge
+    match of_bytes ge pk with
+    | 0 -> ge
+    | _ -> failwith "internal error"
+
+  let to_pk t =
+    let buf = Bigstring.create Sign.pkbytes in
+    to_bytes buf t ;
+    Sign.unsafe_pk_of_bytes buf
 
   let of_bytes buf =
     let ge = Bigstring.create ge_bytes in
@@ -502,6 +508,9 @@ module Ed25519 = struct
     let buf = Bigstring.create bytes in
     ignore (blit ge buf) ;
     buf
+
+  let equal a b =
+    Bigstring.equal (to_bytes a) (to_bytes b)
 
   external add : t -> t -> t -> unit =
     "caml_monocypher_ge_add" [@@noalloc]

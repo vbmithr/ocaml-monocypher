@@ -99,6 +99,9 @@ module Sign : sig
   val pkbytes : int
 
   val equal : 'a key -> 'a key -> bool
+  val buffer : _ key -> Bigstring.t
+  (** [buffer k] is [k]'s internal buffer. DO NOT MODIFY. *)
+
   val wipe : _ key -> unit
 
   val unsafe_pk_of_bytes : Bigstring.t -> public key
@@ -137,8 +140,13 @@ module Ed25519 : sig
   type t
   (** Type of a point on the Ed25519 curve. *)
 
+  val equal : t -> t -> bool
+  (** [equal a b] is [true] if [to_bytes a] = [to_bytes b], [false]
+      otherwise. *)
+
   val bytes : int
   val of_pk : public Sign.key -> t
+  val to_pk : t -> public Sign.key
 
   val of_bytes : Bigstring.t -> t option
   (** [of_bytes buf] is [Some t] iff [buf] is at least 32 bytes long
