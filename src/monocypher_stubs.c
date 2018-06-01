@@ -2106,6 +2106,9 @@ static int ge_frombytes(ge *h, const u8 s[32])
         }
         fe_mul(h->X, h->X, sqrtm1);
     }
+    if (fe_isnegative(h->X) != (s[31] >> 7)) {
+        fe_neg(h->X, h->X);
+    }
     fe_mul(h->T, h->X, h->Y);
     return 0;
 }
