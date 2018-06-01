@@ -30,6 +30,22 @@ module Hash : sig
     val update : ctx -> Bigstring.t -> unit
     val blit_final : ctx -> Bigstring.t -> int
     val final : ctx -> Bigstring.t
+
+    val digest :
+      ?key:Bigstring.t -> int -> Bigstring.t -> Bigstring.t
+  end
+
+  module SHA512 : sig
+    type ctx
+    (** Type of a SHA512 context. Gets wiped after a call to
+        [blit_final] or [final]. *)
+
+    val init : unit -> ctx
+    val update : ctx -> Bigstring.t -> unit
+    val blit_final : ctx -> Bigstring.t -> int
+    val final : ctx -> Bigstring.t
+
+    val digest : Bigstring.t -> Bigstring.t
   end
 end
 
@@ -41,6 +57,7 @@ end
 
 type secret
 type public
+type extended
 
 module DH : sig
   type shared
@@ -85,7 +102,10 @@ module Sign : sig
   val wipe : _ key -> unit
 
   val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
+  val ek_of_bytes : ?pos:int -> Bigstring.t -> extended key
+
   val neuterize : _ key -> public key
+  val extend : secret key -> extended key
 
   val blit : _ key -> Bigstring.t -> int -> int
 
@@ -94,6 +114,12 @@ module Sign : sig
 
   val sign_gen :
     pk:public key -> sk:secret key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
+
+  val sign_extended :
+    pk:public key -> ek:extended key -> msg:Bigstring.t -> Bigstring.t -> int
+
+  val sign_gen_extended :
+    pk:public key -> ek:extended key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
 
   val check :
     pk:public key -> msg:Bigstring.t -> Bigstring.t -> bool

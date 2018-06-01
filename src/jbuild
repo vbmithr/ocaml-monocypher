@@ -3,6 +3,6 @@
 (library
  ((name            monocypher)
   (public_name     monocypher)
-  (libraries       (gen bigstring ocplib-endian.bigstring zarith))
+  (libraries       (gen bigstring zarith))
   (c_names         (sha512 monocypher_stubs))
   (c_flags         (-DED25519_SHA512 -O3))))

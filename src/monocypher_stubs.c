@@ -1839,6 +1839,11 @@ int crypto_unlock(u8       *plain_text,
 #include <caml/bigarray.h>
 #include "platform-specific.h"
 
+CAMLprim value caml_monocypher_trim_scalar(value buf) {
+    trim_scalar(Caml_ba_data_val(buf));
+    return Val_unit;
+}
+
 CAMLprim value caml_monocypher_getrandom(value buf, value buflen) {
     if (default_RNG_defined) {
         int ret = default_RNG(Caml_ba_data_val(buf), Long_val(buflen));
@@ -1860,6 +1865,28 @@ CAMLprim value caml_monocypher_crypto_verify32(value a, value b) {
 }
 CAMLprim value caml_monocypher_crypto_verify64(value a, value b) {
     return Val_int(crypto_verify64(Caml_ba_data_val(a), Caml_ba_data_val(b)));
+}
+
+CAMLprim value caml_monocypher_sizeof_crypto_sha512_ctx(value unit) {
+    return Val_long(sizeof(crypto_sha512_ctx));
+}
+
+CAMLprim value caml_monocypher_crypto_sha512_init(value ctx) {
+    crypto_sha512_init(Caml_ba_data_val(ctx));
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_sha512_update(value ctx, value msg) {
+    crypto_sha512_update(Caml_ba_data_val(ctx),
+                         Caml_ba_data_val(msg),
+                         Caml_ba_array_val(msg)->dim[0]);
+    return Val_unit;
+}
+
+CAMLprim value caml_monocypher_crypto_sha512_final(value ctx, value hash) {
+    crypto_sha512_final(Caml_ba_data_val(ctx),
+                        Caml_ba_data_val(hash));
+    return Val_unit;
 }
 
 CAMLprim value caml_monocypher_sizeof_crypto_blake2b_ctx(value unit) {
@@ -1943,6 +1970,21 @@ CAMLprim value caml_monocypher_crypto_sign_public_key(value pk, value sk) {
     return Val_unit;
 }
 
+void crypto_sign_public_key_extended(u8       public_key[32],
+                                     const u8 extended_key[64])
+{
+    ge A;
+    ge_scalarmult_base(&A, extended_key);
+    ge_tobytes(public_key, &A);
+    WIPE_CTX(&A);
+}
+
+CAMLprim value caml_monocypher_crypto_sign_public_key_extended(value pk, value ek) {
+    crypto_sign_public_key_extended(Caml_ba_data_val(pk),
+                                    Caml_ba_data_val(ek));
+    return Val_unit;
+}
+
 CAMLprim value caml_monocypher_sizeof_crypto_sign_ctx(value unit) {
     return Val_int(sizeof(crypto_sign_ctx));
 }
@@ -1951,6 +1993,37 @@ CAMLprim value caml_monocypher_crypto_sign_init_first_pass(value ctx, value sk, 
     crypto_sign_init_first_pass(Caml_ba_data_val(ctx),
                                 Caml_ba_data_val(sk),
                                 Caml_ba_data_val(pk));
+    return Val_unit;
+}
+
+void crypto_sign_init_first_pass_extended(crypto_sign_ctx *ctx,
+                                          const u8  extended_key[64],
+                                          const u8  public_key[32])
+{
+    u8 *a      = ctx->buf;
+    u8 *prefix = ctx->buf + 32;
+    FOR(i, 0, 64) { a[i] = extended_key[i]; }
+
+    if (public_key == 0) {
+        crypto_sign_public_key_extended(ctx->pk, extended_key);
+    } else {
+        FOR (i, 0, 32) {
+            ctx->pk[i] = public_key[i];
+        }
+    }
+
+    // Constructs the "random" nonce from the secret key and message.
+    // An actual random number would work just fine, and would save us
+    // the trouble of hashing the message twice.  If we did that
+    // however, the user could fuck it up and reuse the nonce.
+    HASH_INIT  (&ctx->hash);
+    HASH_UPDATE(&ctx->hash, prefix , 32);
+}
+
+CAMLprim value caml_monocypher_crypto_sign_init_first_pass_extended(value ctx, value ek, value pk) {
+    crypto_sign_init_first_pass_extended(Caml_ba_data_val(ctx),
+                                         Caml_ba_data_val(ek),
+                                         Caml_ba_data_val(pk));
     return Val_unit;
 }
 

@@ -46,6 +46,21 @@ let msg_key_key =
 let expected_hash_key =
   Cstruct.to_bigarray @@ Hex.to_cstruct (`Hex "12cd1674a4488a5d7c2b3160d2e2c4b58371bedad793418d6f19c6ee385d70b3e06739369d4df910edb0b0a54cbff43d54544cd37ab3a06cfa0a3ddac8b66c89")
 
+let test_sha512 () =
+  let open Hash.SHA512 in
+  let ctx = init () in
+  update ctx Bigstring.empty ;
+  let expected_hash = Cstruct.to_bigarray @@ Hex.to_cstruct (`Hex "cf83e1357eefb8bd\
+                                                                   f1542850d66d8007\
+                                                                   d620e4050b5715dc\
+                                                                   83f4a921d36ce9ce\
+                                                                   47d0d13c5d85f2b0\
+                                                                   ff8318d2877eec2f\
+                                                                   63b931bd47417a81\
+                                                                   a538327af927da3e") in
+  let hash = final ctx in
+  Alcotest.check bigstring "final" expected_hash hash
+
 let test_blake2b () =
   let hash_size = 64 in
   let ctx = Hash.Blake2b.init hash_size in
@@ -118,6 +133,20 @@ let test_sign () =
   Alcotest.(check bool "sign check" true (Sign.check_gen ~pk (msg_gen ()) signature)) ;
   ()
 
+let test_sign_extended () =
+  let sk = Rand.gen Sign.skbytes in
+  let sk = Sign.sk_of_bytes sk in
+  let pk = Sign.neuterize sk in
+  let ek = Sign.extend sk in
+  let signature = Bigstring.create Sign.bytes in
+  let nb_written = Sign.sign_extended ~pk ~ek ~msg signature in
+  Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
+  Alcotest.(check bool "sign check" true (Sign.check ~pk ~msg signature)) ;
+  let nb_written = Sign.sign_gen_extended ~pk ~ek msg_gen signature in
+  Alcotest.(check int "sign nb written" Sign.bytes nb_written) ;
+  Alcotest.(check bool "sign check" true (Sign.check_gen ~pk (msg_gen ()) signature)) ;
+  ()
+
 let test_comm () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
@@ -158,6 +187,7 @@ let basic = [
   "equal16", `Quick, test_equal16 ;
   "equal32", `Quick, test_equal16 ;
   "equal64", `Quick, test_equal16 ;
+  "sha512", `Quick, test_sha512 ;
   "blake2b", `Quick, test_blake2b ;
   "blake2b_blit", `Quick, test_blake2b_blit ;
   "blake2b_key", `Quick, test_blake2b_key ;
@@ -165,6 +195,7 @@ let basic = [
   "dh", `Quick, test_dh ;
   "box", `Quick, test_box ;
   "sign", `Quick, test_sign ;
+  "sign_extended", `Quick, test_sign_extended ;
   "commutativity", `Quick, test_comm ;
   "associativity", `Quick, test_assoc ;
   "arith", `Quick, test_arith ;

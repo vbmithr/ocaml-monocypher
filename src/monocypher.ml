@@ -93,7 +93,6 @@ module Hash = struct
       if Bigstring.length buf < len then
         invalid_arg (Printf.sprintf "Hash.Blake2b.blit_final: buffer \
                                      is less than %d bytes" len) ;
-      let len = hash_size ctx in
       final ctx buf ;
       len
 
@@ -102,8 +101,51 @@ module Hash = struct
       final ctx hash ;
       hash
 
+    let digest ?key len msg =
+      let ctx = init ?key len in
+      update ctx msg ;
+      final ctx
   end
+
   module SHA512 = struct
+    external sizeof_ctx : unit -> int =
+      "caml_monocypher_sizeof_crypto_sha512_ctx" [@@noalloc]
+
+    external init : Bigstring.t -> unit =
+      "caml_monocypher_crypto_sha512_init" [@@noalloc]
+
+    external update : Bigstring.t -> Bigstring.t -> unit =
+      "caml_monocypher_crypto_sha512_update" [@@noalloc]
+
+    external final : Bigstring.t -> Bigstring.t -> unit =
+      "caml_monocypher_crypto_sha512_final" [@@noalloc]
+
+    type ctx = Bigstring.t
+
+    let ctxlen = sizeof_ctx ()
+    let hashlen = 64
+
+    let init () =
+      let ctx = Bigstring.create ctxlen in
+      init ctx ;
+      ctx
+
+    let blit_final ctx buf =
+      if Bigstring.length buf < hashlen then
+        invalid_arg (Printf.sprintf "Hash.Blake2b.blit_final: buffer \
+                                     is less than %d bytes" hashlen) ;
+      final ctx buf ;
+      hashlen
+
+    let final ctx =
+      let hash = Bigstring.create hashlen in
+      final ctx hash ;
+      hash
+
+    let digest msg =
+      let ctx = init () in
+      update ctx msg ;
+      final ctx
   end
 end
 
@@ -128,6 +170,7 @@ end
 
 type secret
 type public
+type extended
 
 module DH = struct
   external neuterize : Bigstring.t -> Bigstring.t -> unit =
@@ -234,6 +277,9 @@ module Sign = struct
   external neuterize : Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_sign_public_key" [@@noalloc]
 
+  external neuterize_extended : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_public_key_extended" [@@noalloc]
+
   external sizeof_sign_ctx : unit -> int =
     "caml_monocypher_sizeof_crypto_sign_ctx" [@@noalloc]
 
@@ -246,6 +292,10 @@ module Sign = struct
   external sign_init_first_pass :
     Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_sign_init_first_pass" [@@noalloc]
+
+  external sign_init_first_pass_extended :
+    Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_crypto_sign_init_first_pass_extended" [@@noalloc]
 
   external sign_init_second_pass :
     Bigstring.t -> unit =
@@ -271,23 +321,28 @@ module Sign = struct
   type _ key =
     | Sk : Bigstring.t -> secret key
     | Pk : Bigstring.t -> public key
+    | Ek : Bigstring.t -> extended key
 
   let equal : type a. a key -> a key -> bool = fun a b ->
     match a, b with
     | Sk a, Sk b -> Bigstring.equal a b
     | Pk a, Pk b -> Bigstring.equal a b
+    | Ek a, Ek b -> Bigstring.equal a b
 
   let buffer : type a. a key -> Bigstring.t = function
     | Sk buf -> buf
     | Pk buf -> buf
+    | Ek buf -> buf
 
   let wipe : type a. a key -> unit = function
     | Sk buf -> wipe buf
     | Pk buf -> wipe buf
+    | Ek buf -> wipe buf
 
   let bytes = 64
   let skbytes = 32
   let pkbytes = 32
+  let ekbytes = 64
 
   let sk_of_bytes ?(pos=0) buf =
     let buflen = Bigstring.length buf in
@@ -298,10 +353,20 @@ module Sign = struct
     Bigstring.blit buf pos sk 0 skbytes ;
     Sk sk
 
+  let ek_of_bytes ?(pos=0) buf =
+    let buflen = Bigstring.length buf in
+    if pos < 0 || buflen - pos < ekbytes then
+      invalid_arg (Printf.sprintf "Sign.ek_of_bytes: buffer (len = %d) \
+                                   must be at least %d bytes" buflen ekbytes) ;
+    let ek = Bigstring.create ekbytes in
+    Bigstring.blit buf pos ek 0 ekbytes ;
+    Ek ek
+
   let blit : type a. a key -> Bigstring.t -> int -> int = fun k buf pos ->
     begin match k with
     | Sk sk -> Bigstring.blit sk 0 buf pos skbytes ; skbytes
     | Pk pk -> Bigstring.blit pk 0 buf pos pkbytes ; pkbytes
+    | Ek ek -> Bigstring.blit ek 0 buf pos ekbytes ; ekbytes
     end
 
   let neuterize : type a. a key -> public key = function
@@ -310,6 +375,18 @@ module Sign = struct
       let pk = Bigstring.create pkbytes in
       neuterize pk sk ;
       Pk pk
+    | Ek ek ->
+      let pk = Bigstring.create pkbytes in
+      neuterize_extended pk ek ;
+      Pk pk
+
+  external trim_scalar : Bigstring.t -> unit =
+    "caml_monocypher_trim_scalar" [@@noalloc]
+
+  let extend (Sk sk) =
+    let ek = Hash.SHA512.digest sk in
+    trim_scalar ek ;
+    Ek ek
 
   let sign_gen ~pk:(Pk pk) ~sk:(Sk sk) g signature =
     let siglen = Bigstring.length signature in
@@ -326,6 +403,22 @@ module Sign = struct
 
   let sign ~pk ~sk ~msg signature =
     sign_gen ~pk ~sk (Gen.Restart.return msg) signature
+
+  let sign_gen_extended ~pk:(Pk pk) ~ek:(Ek ek) g signature =
+    let siglen = Bigstring.length signature in
+    if siglen < bytes then
+      invalid_arg (Printf.sprintf "Sign.sign: signature buffer (len = \
+                                   %d) must be at least %d bytes" siglen bytes) ;
+    let ctx = Bigstring.create sign_ctx_bytes in
+    sign_init_first_pass_extended ctx ek pk ;
+    Gen.iter (sign_update ctx) (g ()) ;
+    sign_init_second_pass ctx ;
+    Gen.iter (sign_update ctx) (g ()) ;
+    sign_final ctx signature ;
+    bytes
+
+  let sign_extended ~pk ~ek ~msg signature =
+    sign_gen_extended ~pk ~ek (Gen.Restart.return msg) signature
 
   let check_gen ~pk:(Pk pk) g signature =
     let siglen = Bigstring.length signature in
