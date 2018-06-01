@@ -344,6 +344,36 @@ module Sign = struct
   let pkbytes = 32
   let ekbytes = 64
 
+  let unsafe_pk_of_bytes buf =
+    let buflen = Bigstring.length buf in
+    if buflen <> pkbytes then
+      invalid_arg (Printf.sprintf "Sign.unsafe_pk_of_bytes: buffer \
+                                   (len = %d) must be exactly %d bytes" buflen pkbytes) ;
+    Pk buf
+
+  let unsafe_sk_of_bytes buf =
+    let buflen = Bigstring.length buf in
+    if buflen <> skbytes then
+      invalid_arg (Printf.sprintf "Sign.unsafe_sk_of_bytes: buffer \
+                                   (len = %d) must be excatly %d bytes" buflen skbytes) ;
+    Sk buf
+
+  let unsafe_ek_of_bytes buf =
+    let buflen = Bigstring.length buf in
+    if buflen <> ekbytes then
+      invalid_arg (Printf.sprintf "Sign.unsafe_ek_of_bytes: buffer \
+                                   (len = %d) must be exactly %d bytes" buflen ekbytes) ;
+    Ek buf
+
+  let pk_of_bytes ?(pos=0) buf =
+    let buflen = Bigstring.length buf in
+    if pos < 0 || buflen - pos < pkbytes then
+      invalid_arg (Printf.sprintf "Sign.pk_of_bytes: buffer (len = %d) \
+                                   must be at least %d bytes" buflen pkbytes) ;
+    let pk = Bigstring.create pkbytes in
+    Bigstring.blit buf pos pk 0 pkbytes ;
+    Pk pk
+
   let sk_of_bytes ?(pos=0) buf =
     let buflen = Bigstring.length buf in
     if pos < 0 || buflen - pos < skbytes then

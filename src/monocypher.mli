@@ -101,6 +101,11 @@ module Sign : sig
   val equal : 'a key -> 'a key -> bool
   val wipe : _ key -> unit
 
+  val unsafe_pk_of_bytes : Bigstring.t -> public key
+  val unsafe_sk_of_bytes : Bigstring.t -> secret key
+  val unsafe_ek_of_bytes : Bigstring.t -> extended key
+
+  val pk_of_bytes : ?pos:int -> Bigstring.t -> public key
   val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
   val ek_of_bytes : ?pos:int -> Bigstring.t -> extended key
 
