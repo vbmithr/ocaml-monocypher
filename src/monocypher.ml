@@ -6,6 +6,9 @@
 external wipe : Bigstring.t -> int -> unit =
   "caml_monocypher_crypto_wipe" [@@noalloc]
 
+external wipe_bytes : Bytes.t -> int -> unit =
+  "caml_monocypher_crypto_wipe_bytes" [@@noalloc]
+
 let check_len buflen = function
   | None -> buflen
   | Some l when l < 0 ->
@@ -18,6 +21,11 @@ let wipe ?len buf =
   let buflen = Bigstring.length buf in
   let len = check_len buflen len in
   wipe buf len
+
+let wipe_bytes ?len buf =
+  let buflen = Bytes.length buf in
+  let len = check_len buflen len in
+  wipe_bytes buf len
 
 external equal16 : Bigstring.t -> Bigstring.t -> int =
   "caml_monocypher_crypto_verify16" [@@noalloc]

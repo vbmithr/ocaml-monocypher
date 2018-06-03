@@ -1857,6 +1857,11 @@ CAMLprim value caml_monocypher_crypto_wipe(value buf, value buflen) {
     return Val_unit;
 }
 
+CAMLprim value caml_monocypher_crypto_wipe_bytes(value buf, value buflen) {
+    crypto_wipe(Bytes_val(buf), Long_val(buflen));
+    return Val_unit;
+}
+
 CAMLprim value caml_monocypher_crypto_verify16(value a, value b) {
     return Val_int(crypto_verify16(Caml_ba_data_val(a), Caml_ba_data_val(b)));
 }
