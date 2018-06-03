@@ -27,6 +27,9 @@ let wipe_bytes ?len buf =
   let len = check_len buflen len in
   wipe_bytes buf len
 
+let wipe_string ?len buf =
+  wipe_bytes ?len (Bytes.unsafe_of_string buf)
+
 external equal16 : Bigstring.t -> Bigstring.t -> int =
   "caml_monocypher_crypto_verify16" [@@noalloc]
 external equal32 : Bigstring.t -> Bigstring.t -> int =

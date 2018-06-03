@@ -7,6 +7,7 @@
 
 val wipe : ?len:int -> Bigstring.t -> unit
 val wipe_bytes : ?len:int -> Bytes.t -> unit
+val wipe_string : ?len:int -> String.t -> unit
 
 (** {1 Constant Time Comparison} *)
 
