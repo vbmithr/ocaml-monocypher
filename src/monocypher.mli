@@ -34,6 +34,8 @@ module Hash : sig
 
     val digest :
       ?key:Bigstring.t -> int -> Bigstring.t -> Bigstring.t
+    val blit_digest :
+      ?key:Bigstring.t -> int -> Bigstring.t -> msg:Bigstring.t -> int
   end
 
   module SHA512 : sig
@@ -47,6 +49,7 @@ module Hash : sig
     val final : ctx -> Bigstring.t
 
     val digest : Bigstring.t -> Bigstring.t
+    val blit_digest : Bigstring.t -> msg:Bigstring.t -> int
   end
 end
 

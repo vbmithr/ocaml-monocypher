@@ -113,6 +113,11 @@ module Hash = struct
       let ctx = init ?key len in
       update ctx msg ;
       final ctx
+
+    let blit_digest ?key len buf ~msg =
+      let ctx = init ?key len in
+      update ctx msg ;
+      blit_final ctx buf
   end
 
   module SHA512 = struct
@@ -154,6 +159,11 @@ module Hash = struct
       let ctx = init () in
       update ctx msg ;
       final ctx
+
+    let blit_digest buf ~msg =
+      let ctx = init () in
+      update ctx msg ;
+      blit_final ctx buf
   end
 end
 
