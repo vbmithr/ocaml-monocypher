@@ -266,7 +266,7 @@ module Box = struct
     "caml_monocypher_crypto_lock" [@@noalloc]
 
   external unlock : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
-    "caml_monocypher_crypto_lock" [@@noalloc]
+    "caml_monocypher_crypto_unlock" [@@noalloc]
 
   type key = Bigstring.t
 
