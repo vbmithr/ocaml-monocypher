@@ -89,6 +89,10 @@ module Box : sig
   val noncebytes : int
   val macbytes : int
 
+  val unsafe_key_of_bytes : Bigstring.t -> key
+  (** [unsafe_key_of_bytes buf] uses [buf] as the 32 bytes key. DO NOT
+      MODIFY [buf] afterwards. *)
+
   val key_of_bytes : ?pos:int -> Bigstring.t -> key
   val wipe : key -> unit
 

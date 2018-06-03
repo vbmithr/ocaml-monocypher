@@ -274,6 +274,13 @@ module Box = struct
   let noncebytes = 24
   let macbytes = 16
 
+  let unsafe_key_of_bytes buf =
+    let buflen = Bigstring.length buf in
+    if buflen <> 32 then
+      invalid_arg (Printf.sprintf "Box.unsafe_key_of_bytes: buffer \
+                                   (len = %d) must be 32 bytes long" buflen) ;
+    buf
+
   let key_of_bytes ?(pos=0) buf =
     let buflen = Bigstring.length buf in
     if pos < 0 || buflen - pos < bytes then
