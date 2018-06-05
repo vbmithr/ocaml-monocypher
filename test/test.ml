@@ -109,16 +109,14 @@ let test_box () =
   let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
   let pk2 = DH.neuterize sk2 in
   let k = DH.shared_exn sk pk2 in
-  let k = DH.buffer k in
-  let key = Box.key_of_bytes k in
-  let msglen = Bigstring.length msg in
-  let buf = Bigstring.init (msglen + Box.macbytes) (fun _ -> '\x00') in
+  let key = DH.buffer k in
+  let buf = Bigstring.copy msg in
+  let mac = Bigstring.create Box.macbytes in
   let nonce = Rand.gen Box.noncebytes in
-  Bigstring.blit msg 0 buf Box.macbytes msglen ;
-  Box.lock ~key ~nonce buf ;
-  let res = Box.unlock ~key ~nonce buf in
+  Box.lock ~mac ~key ~nonce buf ;
+  let res = Box.unlock ~mac ~key ~nonce buf in
   Alcotest.(check bool "box decoded ok" true res) ;
-  Alcotest.(check bigstring "msg ok" msg (Bigstring.sub buf Box.macbytes msglen))
+  Alcotest.(check bigstring "msg ok" msg buf)
 
 let test_sign () =
   let sk = Rand.gen Sign.skbytes in

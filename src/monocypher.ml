@@ -262,41 +262,39 @@ module DH = struct
 end
 
 module Box = struct
-  external lock : Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
+  external lock :
+    Bigstring.t -> Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_lock" [@@noalloc]
 
-  external unlock : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
+  external unlock :
+    Bigstring.t -> Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
     "caml_monocypher_crypto_unlock" [@@noalloc]
 
-  type key = Bigstring.t
-
-  let bytes = 32
+  let keybytes = 32
   let noncebytes = 24
   let macbytes = 16
 
-  let unsafe_key_of_bytes buf =
-    let buflen = Bigstring.length buf in
-    if buflen <> 32 then
-      invalid_arg (Printf.sprintf "Box.unsafe_key_of_bytes: buffer \
-                                   (len = %d) must be 32 bytes long" buflen) ;
-    buf
+  let check_lengths key nonce mac =
+    let keylen = Bigstring.length key in
+    let noncelen = Bigstring.length nonce in
+    let maclen = Bigstring.length mac in
+    if keylen < keybytes then
+      invalid_arg (Printf.sprintf "Box.{un,}lock: key must be at least %d \
+                                   bytes" keylen) ;
+    if noncelen < noncebytes then
+      invalid_arg (Printf.sprintf "Box.{un,}lock: nonce must be at least %d \
+                                   bytes" noncelen) ;
+    if maclen < macbytes then
+      invalid_arg (Printf.sprintf "Box.{un,}lock: mac must be at least %d \
+                                   bytes" maclen)
 
-  let key_of_bytes ?(pos=0) buf =
-    let buflen = Bigstring.length buf in
-    if pos < 0 || buflen - pos < bytes then
-      invalid_arg (Printf.sprintf "Box.key_of_bytes: buffer (len = %d) must be at \
-                                   least %d bytes" buflen bytes) ;
-    let k = Bigstring.create bytes in
-    Bigstring.blit buf pos k 0 bytes ;
-    k
+  let lock ~key ~nonce ~mac buf =
+    check_lengths key nonce mac ;
+    lock mac buf key nonce
 
-  let wipe k = wipe k
-
-  let lock ~key ~nonce buf =
-    lock buf key nonce
-
-  let unlock ~key ~nonce buf =
-    match unlock buf key nonce with
+  let unlock ~key ~nonce ~mac buf =
+    check_lengths key nonce mac ;
+    match unlock mac buf key nonce with
     | 0 -> true
     | _ -> false
 end

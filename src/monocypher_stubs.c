@@ -1950,23 +1950,23 @@ CAMLprim value caml_monocypher_crypto_key_exchange(value k, value sk, value pk) 
                                        Caml_ba_data_val(pk)));
 }
 
-CAMLprim value caml_monocypher_crypto_lock(value cmsg, value key, value nonce) {
-    crypto_lock(Caml_ba_data_val(cmsg),
-                Caml_ba_data_val(cmsg) + 16,
+CAMLprim value caml_monocypher_crypto_lock(value mac, value cmsg, value key, value nonce) {
+    crypto_lock(Caml_ba_data_val(mac),
+                Caml_ba_data_val(cmsg),
                 Caml_ba_data_val(key),
                 Caml_ba_data_val(nonce),
-                Caml_ba_data_val(cmsg) + 16,
-                Caml_ba_array_val(cmsg)->dim[0] - 16);
+                Caml_ba_data_val(cmsg),
+                Caml_ba_array_val(cmsg)->dim[0]);
     return Val_unit;
 }
 
-CAMLprim value caml_monocypher_crypto_unlock(value msg, value key, value nonce) {
-    return Val_int(crypto_unlock(Caml_ba_data_val(msg) + 16,
+CAMLprim value caml_monocypher_crypto_unlock(value mac, value msg, value key, value nonce) {
+    return Val_int(crypto_unlock(Caml_ba_data_val(msg),
                                  Caml_ba_data_val(key),
                                  Caml_ba_data_val(nonce),
+                                 Caml_ba_data_val(mac),
                                  Caml_ba_data_val(msg),
-                                 Caml_ba_data_val(msg) + 16,
-                                 Caml_ba_array_val(msg)->dim[0] - 16));
+                                 Caml_ba_array_val(msg)->dim[0]));
 }
 
 CAMLprim value caml_monocypher_crypto_sign_public_key(value pk, value sk) {

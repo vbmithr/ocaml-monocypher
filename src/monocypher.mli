@@ -83,21 +83,14 @@ module DH : sig
 end
 
 module Box : sig
-  type key
-
-  val bytes : int
+  val keybytes : int
   val noncebytes : int
   val macbytes : int
 
-  val unsafe_key_of_bytes : Bigstring.t -> key
-  (** [unsafe_key_of_bytes buf] uses [buf] as the 32 bytes key. DO NOT
-      MODIFY [buf] afterwards. *)
-
-  val key_of_bytes : ?pos:int -> Bigstring.t -> key
-  val wipe : key -> unit
-
-  val lock : key:key -> nonce:Bigstring.t -> Bigstring.t -> unit
-  val unlock : key:key -> nonce:Bigstring.t -> Bigstring.t -> bool
+  val lock :
+    key:Bigstring.t -> nonce:Bigstring.t -> mac:Bigstring.t -> Bigstring.t -> unit
+  val unlock :
+    key:Bigstring.t -> nonce:Bigstring.t -> mac:Bigstring.t -> Bigstring.t -> bool
 end
 
 module Sign : sig
