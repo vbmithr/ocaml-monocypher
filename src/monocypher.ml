@@ -213,6 +213,11 @@ module DH = struct
     | Sk buf -> buf
     | Pk buf -> buf
 
+  let copy : type a. a key -> a key = function
+    | K  buf -> K (Bigstring.copy buf)
+    | Sk buf -> Sk (Bigstring.copy buf)
+    | Pk buf -> Pk (Bigstring.copy buf)
+
   let wipe : type a. a key -> unit = function
     | K  buf -> wipe buf
     | Sk buf -> wipe buf
@@ -360,6 +365,11 @@ module Sign = struct
     | Pk buf -> buf
     | Ek buf -> buf
 
+  let copy : type a. a key -> a key = function
+    | Sk buf -> Sk (Bigstring.copy buf)
+    | Pk buf -> Pk (Bigstring.copy buf)
+    | Ek buf -> Ek (Bigstring.copy buf)
+
   let wipe : type a. a key -> unit = function
     | Sk buf -> wipe buf
     | Pk buf -> wipe buf
@@ -498,6 +508,8 @@ module Ed25519 = struct
   let bytes = 32
   let fe_bytes = 10 * 4
   let ge_bytes = 4 * fe_bytes
+
+  let copy = Bigstring.copy
 
   external of_bytes : Bigstring.t -> Bigstring.t -> int =
     "caml_monocypher_ge_frombytes" [@@noalloc]

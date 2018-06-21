@@ -70,6 +70,7 @@ module DH : sig
 
   val bytes : int
   val equal : 'a key -> 'a key -> bool
+  val copy : 'a key -> 'a key
   val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
   val neuterize : _ key -> public key
   val shared : secret key -> public key -> shared key option
@@ -104,6 +105,7 @@ module Sign : sig
   val buffer : _ key -> Bigstring.t
   (** [buffer k] is [k]'s internal buffer. DO NOT MODIFY. *)
 
+  val copy : 'a key -> 'a key
   val wipe : _ key -> unit
 
   val unsafe_pk_of_bytes : Bigstring.t -> public key
@@ -147,6 +149,8 @@ module Ed25519 : sig
       otherwise. *)
 
   val bytes : int
+  val copy : t -> t
+
   val of_pk : public Sign.key -> t
   val to_pk : t -> public Sign.key
 
