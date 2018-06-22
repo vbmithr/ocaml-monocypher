@@ -105,6 +105,8 @@ module Sign : sig
   val buffer : _ key -> Bigstring.t
   (** [buffer k] is [k]'s internal buffer. DO NOT MODIFY. *)
 
+  val length : _ key -> int
+
   val copy : 'a key -> 'a key
   val wipe : _ key -> unit
 

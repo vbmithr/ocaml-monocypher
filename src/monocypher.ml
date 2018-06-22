@@ -365,6 +365,11 @@ module Sign = struct
     | Pk buf -> buf
     | Ek buf -> buf
 
+  let length : type a. a key -> int = function
+    | Sk buf -> Bigstring.length buf
+    | Pk buf -> Bigstring.length buf
+    | Ek buf -> Bigstring.length buf
+
   let copy : type a. a key -> a key = function
     | Sk buf -> Sk (Bigstring.copy buf)
     | Pk buf -> Pk (Bigstring.copy buf)
