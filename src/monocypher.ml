@@ -459,37 +459,43 @@ module Sign = struct
     trim_scalar ek ;
     Ek ek
 
-  let sign_gen ~pk:(Pk pk) ~sk:(Sk sk) g signature =
+  let sign_gen ?pk ~sk g signature =
+    let pk = match pk with
+      | None -> neuterize sk
+      | Some pk -> pk in
     let siglen = Bigstring.length signature in
     if siglen < bytes then
       invalid_arg (Printf.sprintf "Sign.sign: signature buffer (len = \
                                    %d) must be at least %d bytes" siglen bytes) ;
     let ctx = Bigstring.create sign_ctx_bytes in
-    sign_init_first_pass ctx sk pk ;
+    sign_init_first_pass ctx (buffer sk) (buffer pk) ;
     Gen.iter (sign_update ctx) (g ()) ;
     sign_init_second_pass ctx ;
     Gen.iter (sign_update ctx) (g ()) ;
     sign_final ctx signature ;
     bytes
 
-  let sign ~pk ~sk ~msg signature =
-    sign_gen ~pk ~sk (Gen.Restart.return msg) signature
+  let sign ?pk ~sk ~msg signature =
+    sign_gen ?pk ~sk (Gen.Restart.return msg) signature
 
-  let sign_gen_extended ~pk:(Pk pk) ~ek:(Ek ek) g signature =
+  let sign_gen_extended ?pk ~ek g signature =
+    let pk = match pk with
+      | None -> neuterize ek
+      | Some pk -> pk in
     let siglen = Bigstring.length signature in
     if siglen < bytes then
       invalid_arg (Printf.sprintf "Sign.sign: signature buffer (len = \
                                    %d) must be at least %d bytes" siglen bytes) ;
     let ctx = Bigstring.create sign_ctx_bytes in
-    sign_init_first_pass_extended ctx ek pk ;
+    sign_init_first_pass_extended ctx (buffer ek) (buffer pk) ;
     Gen.iter (sign_update ctx) (g ()) ;
     sign_init_second_pass ctx ;
     Gen.iter (sign_update ctx) (g ()) ;
     sign_final ctx signature ;
     bytes
 
-  let sign_extended ~pk ~ek ~msg signature =
-    sign_gen_extended ~pk ~ek (Gen.Restart.return msg) signature
+  let sign_extended ?pk ~ek ~msg signature =
+    sign_gen_extended ?pk ~ek (Gen.Restart.return msg) signature
 
   let check_gen ~pk:(Pk pk) g signature =
     let siglen = Bigstring.length signature in

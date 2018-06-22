@@ -124,16 +124,16 @@ module Sign : sig
   val blit : _ key -> Bigstring.t -> int -> int
 
   val sign :
-    pk:public key -> sk:secret key -> msg:Bigstring.t -> Bigstring.t -> int
+    ?pk:public key -> sk:secret key -> msg:Bigstring.t -> Bigstring.t -> int
 
   val sign_gen :
-    pk:public key -> sk:secret key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
+    ?pk:public key -> sk:secret key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
 
   val sign_extended :
-    pk:public key -> ek:extended key -> msg:Bigstring.t -> Bigstring.t -> int
+    ?pk:public key -> ek:extended key -> msg:Bigstring.t -> Bigstring.t -> int
 
   val sign_gen_extended :
-    pk:public key -> ek:extended key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
+    ?pk:public key -> ek:extended key -> Bigstring.t Gen.Restart.t -> Bigstring.t -> int
 
   val check :
     pk:public key -> msg:Bigstring.t -> Bigstring.t -> bool
