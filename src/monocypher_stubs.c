@@ -81,8 +81,8 @@ static u64 x16(const u8 a[16], const u8 b[16])
     return (load64_le(a + 0) ^ load64_le(b + 0))
         |  (load64_le(a + 8) ^ load64_le(b + 8));
 }
-static u64 x32(const u8 a[16],const u8 b[16]){return x16(a,b) | x16(a+16, b+16);}
-static u64 x64(const u8 a[64],const u8 b[64]){return x32(a,b) | x32(a+32, b+32);}
+static u64 x32(const u8 a[16],const u8 b[16]){return x16(a,b)| x16(a+16, b+16);}
+static u64 x64(const u8 a[64],const u8 b[64]){return x32(a,b)| x32(a+32, b+32);}
 int crypto_verify16(const u8 a[16], const u8 b[16]){ return neq0(x16(a, b)); }
 int crypto_verify32(const u8 a[32], const u8 b[32]){ return neq0(x32(a, b)); }
 int crypto_verify64(const u8 a[64], const u8 b[64]){ return neq0(x64(a, b)); }
@@ -308,11 +308,11 @@ static void poly_block(crypto_poly1305_ctx *ctx)
     const u32 rr3 = (r3 >> 2) + r3; // rr3 <= 13fffffb // rr1 == (r3 >> 2) * 5
 
     // (h + c) * r, without carry propagation
-    const u64 x0 = s0*r0 + s1*rr3 + s2*rr2 + s3*rr1 + s4*rr0;//<=97ffffe007fffff8
-    const u64 x1 = s0*r1 + s1*r0  + s2*rr3 + s3*rr2 + s4*rr1;//<=8fffffe20ffffff6
-    const u64 x2 = s0*r2 + s1*r1  + s2*r0  + s3*rr3 + s4*rr2;//<=87ffffe417fffff4
-    const u64 x3 = s0*r3 + s1*r2  + s2*r1  + s3*r0  + s4*rr3;//<=7fffffe61ffffff2
-    const u32 x4 = s4 * (r0 & 3); // ...recover 2 bits       //<=               f
+    const u64 x0 = s0*r0 + s1*rr3 + s2*rr2 + s3*rr1 +s4*rr0;//<=97ffffe007fffff8
+    const u64 x1 = s0*r1 + s1*r0  + s2*rr3 + s3*rr2 +s4*rr1;//<=8fffffe20ffffff6
+    const u64 x2 = s0*r2 + s1*r1  + s2*r0  + s3*rr3 +s4*rr2;//<=87ffffe417fffff4
+    const u64 x3 = s0*r3 + s1*r2  + s2*r1  + s3*r0  +s4*rr3;//<=7fffffe61ffffff2
+    const u32 x4 = s4 * (r0 & 3); // ...recover 2 bits      //<=               f
 
     // partial reduction modulo 2^130 - 5
     const u32 u5 = x4 + (x3 >> 32); // u5 <= 7ffffff5
@@ -364,10 +364,10 @@ void crypto_poly1305_init(crypto_poly1305_ctx *ctx, const u8 key[32])
 {
     // Initial hash is zero
     FOR (i, 0, 5) {
-        ctx->h [i] = 0;
+        ctx->h[i] = 0;
     }
     // add 2^130 to every input block
-    ctx->c  [4] = 1;
+    ctx->c[4] = 1;
     poly_clear_c(ctx);
     // load r and pad (r has some of its bits cleared)
     FOR (i, 0, 1) { ctx->r  [0] = load32_le(key           ) & 0x0fffffff; }
@@ -527,10 +527,15 @@ static void blake2b_compress(crypto_blake2b_ctx *ctx, int is_last_block)
 
 static void blake2b_set_input(crypto_blake2b_ctx *ctx, u8 input, size_t index)
 {
+    if (index == 0) {
+        FOR (i, 0, 16) {
+            ctx->input[i] = 0;
+        }
+    }
     size_t word = index >> 3;
     size_t byte = index & 7;
-    ctx->input[word] &= ~((u64)0xff  << (byte << 3));
-    ctx->input[word] |=   (u64)input << (byte << 3);
+    ctx->input[word] |= (u64)input << (byte << 3);
+
 }
 
 static void blake2b_end_block(crypto_blake2b_ctx *ctx)
@@ -610,7 +615,7 @@ void crypto_blake2b_final(crypto_blake2b_ctx *ctx, u8 *hash)
     }
     blake2b_incr(ctx);         // update the input offset
     blake2b_compress(ctx, -1); // compress the last block
-    size_t nb_words  = ctx->hash_size >> 3;
+    size_t nb_words = ctx->hash_size >> 3;
     FOR (i, 0, nb_words) {
         store64_le(hash + i*8, ctx->hash[i]);
     }
@@ -675,8 +680,8 @@ static void store_block(u8 bytes[1024], const block *b)
     }
 }
 
-static void copy_block(block *o,const block*in){FOR(i,0,128) o->a[i] = in->a[i];}
-static void  xor_block(block *o,const block*in){FOR(i,0,128) o->a[i]^= in->a[i];}
+static void copy_block(block *o,const block*in){FOR(i,0,128)o->a[i] = in->a[i];}
+static void  xor_block(block *o,const block*in){FOR(i,0,128)o->a[i]^= in->a[i];}
 
 // Hash with a virtually unlimited digest size.
 // Doesn't extract more entropy than the base hash function.
@@ -691,7 +696,6 @@ static void extended_hash(u8       *digest, u32 digest_size,
     blake_update_32            (&ctx, digest_size);
     crypto_blake2b_update      (&ctx, input, input_size);
     crypto_blake2b_final       (&ctx, digest);
-    WIPE_CTX(&ctx);
 
     if (digest_size > 64) {
         // the conversion to u64 avoids integer overflow on
@@ -915,7 +919,7 @@ void crypto_argon2i_general(u8       *hash,      u32 hash_size,
 
         // fill first 2 blocks
         block tmp_block;
-        u8 hash_area[1024];
+        u8    hash_area[1024];
         store32_le(initial_hash + 64, 0); // first  additional word
         store32_le(initial_hash + 68, 0); // second additional word
         extended_hash(hash_area, 1024, initial_hash, 72);
@@ -971,9 +975,9 @@ void crypto_argon2i_general(u8       *hash,      u32 hash_size,
     u8 final_block[1024];
     store_block(final_block, blocks + (nb_blocks - 1));
     extended_hash(hash, hash_size, final_block, 1024);
-
-    // wipe final block and work area
     WIPE_BUFFER(final_block);
+
+    // wipe work area
     volatile u64 *p = (u64*)work_area;
     FOR (i, 0, 128 * nb_blocks) {
         p[i] = 0;
@@ -1061,7 +1065,6 @@ static void fe_mul_small(fe h, const fe f, i32 g)
     FE_CARRY;
 }
 static void fe_mul121666(fe h, const fe f) { fe_mul_small(h, f, 121666); }
-static void fe_mul973324(fe h, const fe f) { fe_mul_small(h, f, 973324); }
 
 static void fe_mul(fe h, const fe f, const fe g)
 {
@@ -1357,6 +1360,14 @@ static void ge_from_xy(ge *p, const fe x, const fe y)
     fe_mul(p->T, x, y);
 }
 
+static void ge_cswap(ge *p, ge *q, int b)
+{
+    fe_cswap(p->X, q->X, b);
+    fe_cswap(p->Y, q->Y, b);
+    fe_cswap(p->Z, q->Z, b);
+    fe_cswap(p->T, q->T, b);
+}
+
 static void ge_tobytes(u8 s[32], const ge *h)
 {
     fe recip, x, y;
@@ -1382,7 +1393,7 @@ static int ge_frombytes_neg(ge *h, const u8 s[32])
         -32595792, -7943725, 9377950, 3500415, 12389472,
         -272473, -25146209, -2005654, 326686, 11406482
     } ;
-    fe u, v, v3, vxx, check;
+    fe u, v, v3, vxx, check; // no secret, no wipe
     fe_frombytes(h->Y, s);
     fe_1(h->Z);
     fe_sq(u, h->Y);            // y^2
@@ -1417,12 +1428,13 @@ static int ge_frombytes_neg(ge *h, const u8 s[32])
     return 0;
 }
 
+static const fe D2 = { // - 2 * 121665 / 121666
+    0x2b2f159, 0x1a6e509, 0x22add7a, 0x0d4141d, 0x0038052,
+    0x0f3d130, 0x3407977, 0x19ce331, 0x1c56dff, 0x0901b67
+};
+
 static void ge_add(ge *s, const ge *p, const ge *q)
 {
-    static const fe D2 = { // - 2 * 121665 / 121666
-        0x2b2f159, 0x1a6e509, 0x22add7a, 0x0d4141d, 0x0038052,
-        0x0f3d130, 0x3407977, 0x19ce331, 0x1c56dff, 0x0901b67
-    };
     fe a, b, c, d, e, f, g, h;
     //  A = (Y1-X1) * (Y2-X2)
     //  B = (Y1+X1) * (Y2+X2)
@@ -1438,50 +1450,53 @@ static void ge_add(ge *s, const ge *p, const ge *q)
     fe_mul(s->Y, g, h);  //  Y3 = G * H
     fe_mul(s->Z, f, g);  //  Z3 = F * G
     fe_mul(s->T, e, h);  //  T3 = E * H
-    // not wiping, because ge_add is not used to add secrets.
+
+    WIPE_BUFFER(a);  WIPE_BUFFER(b);  WIPE_BUFFER(c);  WIPE_BUFFER(d);
+    WIPE_BUFFER(e);  WIPE_BUFFER(f);  WIPE_BUFFER(g);  WIPE_BUFFER(h);
 }
 
-// Performing the scalar multiplication directly in Twisted Edwards
-// space woud be simpler, but also slower.  So we do it in Montgomery
-// space instead.  The sign of the Y coordinate however gets lost in
-// translation, so we use a dirty trick to recover it.
+// could use ge_add() for this, but this is slightly faster
+static void ge_double(ge *s, const ge *p)
+{
+    fe a, b, c, d, e, f, g, h;
+    fe_sub(a, p->Y, p->X);  fe_sq(a, a);      //  A = (Y1-X1)^2
+    fe_add(b, p->X, p->Y);  fe_sq(b, b);      //  B = (Y1+X1)^2
+    fe_sq (c, p->T);        fe_mul(c, c, D2); //  C = T1^2 * k
+    fe_sq (d, p->Z);        fe_add(d, d, d);  //  D = Z1^2 * 2
+    fe_sub(e, b, a);                          //  E  = B - A
+    fe_sub(f, d, c);                          //  F  = D - C
+    fe_add(g, d, c);                          //  G  = D + C
+    fe_add(h, b, a);                          //  H  = B + A
+    fe_mul(s->X, e, f);                       //  X3 = E * F
+    fe_mul(s->Y, g, h);                       //  Y3 = G * H
+    fe_mul(s->Z, f, g);                       //  Z3 = F * G
+    fe_mul(s->T, e, h);                       //  T3 = E * H
+
+    WIPE_BUFFER(a);  WIPE_BUFFER(b);  WIPE_BUFFER(c);  WIPE_BUFFER(d);
+    WIPE_BUFFER(e);  WIPE_BUFFER(f);  WIPE_BUFFER(g);  WIPE_BUFFER(h);
+}
+
 static void ge_scalarmult(ge *p, const ge *q, const u8 scalar[32])
 {
-    // sqrt(-486664)
-    static const fe K = { 54885894, 25242303, 55597453,  9067496, 51808079,
-                          33312638, 25456129, 14121551, 54921728,  3972023 };
+    // Simple Montgomery ladder, with straight double and add.
+    ge t;
+    fe_0(p->X);  fe_copy(t.X, q->X);
+    fe_1(p->Y);  fe_copy(t.Y, q->Y);
+    fe_1(p->Z);  fe_copy(t.Z, q->Z);
+    fe_0(p->T);  fe_copy(t.T, q->T);
+    int swap = 0;
+    for (int i = 255; i >= 0; i--) {
+        int b = (scalar[i/8] >> (i & 7)) & 1;
+        swap ^= b;  // xor trick avoids unnecessary swaps
+        ge_cswap(p, &t, swap);
+        swap = b;
+        ge_add(&t, &t, p);
+        ge_double(p, p);
+    }
+    // one last swap makes up for the xor trick
+    ge_cswap(p, &t, swap);
 
-    // convert q to montgomery format
-    fe x1, x2, x3, y1, z1, z2, z3, t1, t2, t3, t4;
-    fe_sub(z1, q->Z, q->Y);  fe_mul(z1, z1, q->X);  fe_invert(z1, z1);
-    fe_add(t1, q->Z, q->Y);
-    fe_mul(x1, q->X, t1  );  fe_mul(x1, x1, z1);
-    fe_mul(y1, q->Z, t1  );  fe_mul(y1, y1, z1);  fe_mul(y1, K, y1);
-    fe_1(z1); // implied in the ladder, needed to convert back.
-
-    // montgomery scalarmult
-    x25519_ladder(x1, x2, z2, x3, z3, scalar);
-
-    // Recover the y coordinate (Katsuyuki Okeya & Kouichi Sakurai, 2001)
-    // Note the shameless reuse of x1: (x1, y1, z1) will correspond to
-    // what was originally (x2, z2).
-    fe_mul(t1, x1, z2);    fe_add(t2, x2, t1);    fe_sub(t3, x2, t1);
-    fe_sq (t3, t3);        fe_mul(t3, t3, x3);    fe_mul973324(t1, z2);
-    fe_add(t2, t2, t1);    fe_mul(t4, x1, x2);    fe_add(t4, t4, z2);
-    fe_mul(t2, t2, t4);    fe_mul(t1, t1, z2);    fe_sub(t2, t2, t1);
-    fe_mul(t2, t2, z3);    fe_add(t1, y1, y1);    fe_mul(t1, t1, z2);
-    fe_mul(t1, t1, z3);    fe_mul(x1, t1, x2);    fe_sub(y1, t2, t3);
-    fe_mul(z1, t1, z2);
-
-    // convert back to twisted edwards
-    fe_sub(t1  , x1, z1);    fe_add(t2  , x1, z1);    fe_mul(x1  , K , x1);
-    fe_mul(p->X, x1, t2);    fe_mul(p->Y, y1, t1);    fe_mul(p->Z, y1, t2);
-    fe_mul(p->T, x1, t1);
-
-    WIPE_BUFFER(t1);  WIPE_BUFFER(x1);  WIPE_BUFFER(z1);  WIPE_BUFFER(y1);
-    WIPE_BUFFER(t2);  WIPE_BUFFER(x2);  WIPE_BUFFER(z2);
-    WIPE_BUFFER(t3);  WIPE_BUFFER(x3);  WIPE_BUFFER(z3);
-    WIPE_BUFFER(t4);
+    WIPE_CTX(&t);
 }
 
 static void ge_scalarmult_base(ge *p, const u8 scalar[32])
@@ -1505,7 +1520,7 @@ static void modL(u8 *r, i64 x[64])
     static const  u64 L[32] = { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
                                 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10 };
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10};
     for (unsigned i = 63; i >= 32; i--) {
         i64 carry = 0;
         FOR (j, i-32, i-12) {
@@ -1714,7 +1729,8 @@ static void lock_ad_padding(crypto_lock_ctx *ctx)
     }
 }
 
-void crypto_lock_init(crypto_lock_ctx *ctx, const u8 key[32], const u8 nonce[24])
+void crypto_lock_init(crypto_lock_ctx *ctx,
+                      const u8 key[32], const u8 nonce[24])
 {
     u8 auth_key[64]; // "Wasting" the whole Chacha block is faster
     ctx->ad_phase     = 1;
