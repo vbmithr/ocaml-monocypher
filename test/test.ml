@@ -154,7 +154,7 @@ let test_keys_step () =
   Alcotest.(check bool "keys" true (Sign.equal pk pk'))
 
 let test_keys () =
-  for i = 0 to 10 do
+  for _ = 0 to 10 do
     test_keys_step ()
   done
 
