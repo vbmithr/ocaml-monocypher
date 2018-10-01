@@ -146,6 +146,12 @@ module Ed25519 : sig
   type t
   (** Type of a point on the Ed25519 curve. *)
 
+  type cached
+  (** Type of a point on the Ed25519 curve, cached representation. *)
+
+  val cache : t -> cached
+  (** [cached t] is [t] in cached representation. *)
+
   val equal : t -> t -> bool
   (** [equal a b] is [true] if [to_bytes a] = [to_bytes b], [false]
       otherwise. *)
@@ -169,8 +175,13 @@ module Ed25519 : sig
   (** [to_bytes t] is a freshly allocated buffer with [t]'s
       serialization in it. *)
 
-  val add : t -> t -> t
+  val add : t -> cached -> t
   val scalarmult : t -> Z.t -> t
+
+  val double_scalarmult : t -> Z.t -> Z.t -> t
+  (** [double_scalarmult t a b] is [at + bB] where B is the curve's
+      base point. *)
+
   val scalarmult_base : Z.t -> t
 end
 

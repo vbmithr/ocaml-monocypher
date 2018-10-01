@@ -161,24 +161,24 @@ let test_keys () =
 let test_comm () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
-  let pk3 = Ed25519.add pk pk2 in
-  let pk3' = Ed25519.add pk2 pk in
+  let pk3 = Ed25519.(add pk (cache pk2)) in
+  let pk3' = Ed25519.(add pk2 (cache pk)) in
   Alcotest.(check bool "commutativity" true (Ed25519.equal pk3 pk3'))
 
 let test_assoc () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk3 = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
-  let sum12 = Ed25519.(add pk pk2) in
-  let sum23 = Ed25519.(add pk2 pk3) in
-  let a = Ed25519.add sum12 pk3 in
-  let b = Ed25519.add pk sum23 in
+  let sum12 = Ed25519.(add pk (cache pk2)) in
+  let sum23 = Ed25519.(add pk2 (cache pk3)) in
+  let a = Ed25519.(add sum12 (cache pk3)) in
+  let b = Ed25519.(add pk (cache sum23)) in
   Alcotest.(check bool "associativity" true (Ed25519.equal a b))
 
 let test_arith () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
   let pk2 = Ed25519.scalarmult pk (Z.of_int 3) in
-  let pk2' = Ed25519.(add (add pk pk) pk) in
+  let pk2' = Ed25519.(add (add pk (cache pk)) (cache pk)) in
   Alcotest.(check bool "arith2" true (Ed25519.equal pk2 pk2'))
 
 let test_arith2 () =

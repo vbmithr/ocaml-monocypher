@@ -24,6 +24,7 @@
 #define WIPE_BUFFER(buffer)  crypto_wipe(buffer, sizeof(buffer))
 #define MIN(a, b)            ((a) <= (b) ? (a) : (b))
 #define ALIGN(x, block_size) ((~(x) + 1) & ((block_size) - 1))
+typedef int8_t   i8;
 typedef uint8_t  u8;
 typedef uint32_t u32;
 typedef int32_t  i32;
@@ -1025,6 +1026,14 @@ static void fe_cswap(fe f, fe g, int b)
     }
 }
 
+static void fe_ccopy(fe f, const fe g, int b)
+{
+    FOR (i, 0, 10) {
+        i32 x = (f[i] ^ g[i]) & -b;
+        f[i] = f[i] ^ x;
+    }
+}
+
 #define FE_CARRY                                                        \
     i64 c0, c1, c2, c3, c4, c5, c6, c7, c8, c9;                         \
     c9 = (t9 + (i64) (1<<24)) >> 25; t0 += c9 * 19; t9 -= c9 * (1 << 25); \
@@ -1154,6 +1163,12 @@ static void fe_sq(fe h, const fe f)
     CARRY;
 }
 
+static void fe_sq2(fe h, const fe f)
+{
+    fe_sq(h, f);
+    fe_mul_small(h, h, 2);
+}
+
 // This could be simplified, but it would be slower
 static void fe_invert(fe out, const fe z)
 {
@@ -1179,7 +1194,7 @@ static void fe_invert(fe out, const fe z)
 }
 
 // This could be simplified, but it would be slower
-void fe_pow22523(fe out, const fe z)
+static void fe_pow22523(fe out, const fe z)
 {
     fe t0, t1, t2;
     fe_sq(t0, z);
@@ -1265,19 +1280,34 @@ static void trim_scalar(u8 s[32])
     s[31] |= 64;
 }
 
-static void x25519_ladder(const fe x1, fe x2, fe z2, fe x3, fe z3,
-                          const u8 scalar[32])
+static int scalar_bit(const u8 s[32], int i) { return (s[i>>3] >> (i&7)) & 1; }
+
+int crypto_x25519(u8       raw_shared_secret[32],
+                  const u8 your_secret_key  [32],
+                  const u8 their_public_key [32])
 {
+    // computes the scalar product
+    fe x1;
+    fe_frombytes(x1, their_public_key);
+
+    // restrict the possible scalar values
+    u8 e[32];
+    FOR (i, 0, 32) {
+        e[i] = your_secret_key[i];
+    }
+    trim_scalar(e);
+
+    // computes the actual scalar product (the result is in x2 and z2)
+    fe x2, z2, x3, z3, t0, t1;
     // Montgomery ladder
     // In projective coordinates, to avoid divisons: x = X / Z
     // We don't care about the y coordinate, it's only 1 bit of information
     fe_1(x2);        fe_0(z2); // "zero" point
     fe_copy(x3, x1); fe_1(z3); // "one"  point
     int swap = 0;
-    fe t0, t1;
     for (int pos = 254; pos >= 0; --pos) {
         // constant time conditional swap before ladder step
-        int b = (scalar[pos >> 3] >> (pos & 7)) & 1;
+        int b = scalar_bit(e, pos);
         swap ^= b; // xor trick avoids swapping at the end of the loop
         fe_cswap(x2, x3, swap);
         fe_cswap(z2, z3, swap);
@@ -1297,29 +1327,6 @@ static void x25519_ladder(const fe x1, fe x2, fe z2, fe x3, fe z3,
     fe_cswap(x2, x3, swap);
     fe_cswap(z2, z3, swap);
 
-    WIPE_BUFFER(t0);
-    WIPE_BUFFER(t1);
-}
-
-int crypto_x25519(u8       raw_shared_secret[32],
-                  const u8 your_secret_key  [32],
-                  const u8 their_public_key [32])
-{
-    // computes the scalar product
-    fe x1;
-    fe_frombytes(x1, their_public_key);
-
-    // restrict the possible scalar values
-    u8 e[32];
-    FOR (i, 0, 32) {
-        e[i] = your_secret_key[i];
-    }
-    trim_scalar(e);
-
-    // computes the actual scalar product (the result is in x2 and z2)
-    fe x2, z2, x3, z3;
-    x25519_ladder(x1, x2, z2, x3, z3, e);
-
     // normalises the coordinates: x == X / Z
     fe_invert(z2, z2);
     fe_mul(x2, x2, z2);
@@ -1328,8 +1335,9 @@ int crypto_x25519(u8       raw_shared_secret[32],
     WIPE_BUFFER(x1);  WIPE_BUFFER(e );
     WIPE_BUFFER(x2);  WIPE_BUFFER(z2);
     WIPE_BUFFER(x3);  WIPE_BUFFER(z3);
+    WIPE_BUFFER(t0);  WIPE_BUFFER(t1);
 
-    // Returns -1 if the input is all zero
+    // Returns -1 if the output is all zero
     // (happens with some malicious public keys)
     return -1 - zerocmp32(raw_shared_secret);
 }
@@ -1345,27 +1353,85 @@ void crypto_x25519_public_key(u8       public_key[32],
 /// Ed25519 ///
 ///////////////
 
+static const  u64 L[32] = { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
+                            0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10};
+
+static void modL(u8 *r, i64 x[64])
+{
+    for (unsigned i = 63; i >= 32; i--) {
+        i64 carry = 0;
+        FOR (j, i-32, i-12) {
+            x[j] += carry - 16 * x[i] * L[j - (i - 32)];
+            carry = (x[j] + 128) >> 8;
+            x[j] -= carry * (1 << 8);
+        }
+        x[i-12] += carry;
+        x[i] = 0;
+    }
+    i64 carry = 0;
+    FOR (i, 0, 32) {
+        x[i] += carry - (x[31] >> 4) * L[i];
+        carry = x[i] >> 8;
+        x[i] &= 255;
+    }
+    FOR (i, 0, 32) {
+        x[i] -= carry * L[i];
+    }
+    FOR (i, 0, 32) {
+        x[i+1] += x[i] >> 8;
+        r[i  ]  = x[i] & 255;
+    }
+}
+
+static void reduce(u8 r[64])
+{
+    i64 x[64];
+    FOR (i, 0, 64) {
+        x[i] = (u64) r[i];
+        r[i] = 0;
+    }
+    modL(r, x);
+    WIPE_BUFFER(x);
+}
+
+// r = (a * b) + c
+static void mul_add(u8 r[32], const u8 a[32], const u8 b[32], const u8 c[32])
+{
+    i64 s[64];
+    FOR (i,  0, 32) { s[i] = (u64) c[i]; }
+    FOR (i, 32, 64) { s[i] = 0;          }
+    FOR (i,  0, 32) {
+        FOR (j, 0, 32) {
+            s[i+j] += a[i] * (u64) b[j];
+        }
+    }
+    modL(r, s);
+    WIPE_BUFFER(s);
+}
+
+static int is_above_L(const u8 a[32])
+{
+    for (int i = 31; i >= 0; i--) {
+        if (a[i] > L[i]) { return 1; }
+        if (a[i] < L[i]) { return 0; }
+    }
+    return 1;
+}
+
 // Point in a twisted Edwards curve,
 // in extended projective coordinates.
 // x = X/Z, y = Y/Z, T = XY/Z
-typedef struct { fe X; fe Y; fe Z; fe T; } ge;
+typedef struct { fe X;  fe Y;  fe Z; fe T;  } ge;
+typedef struct { fe Yp; fe Ym; fe Z; fe T2; } ge_cached;
 
-static void ge_from_xy(ge *p, const fe x, const fe y)
+static void ge_zero(ge *p)
 {
-    FOR (i, 0, 10) {
-        p->X[i] = x[i];
-        p->Y[i] = y[i];
-    }
-    fe_1  (p->Z);
-    fe_mul(p->T, x, y);
-}
-
-static void ge_cswap(ge *p, ge *q, int b)
-{
-    fe_cswap(p->X, q->X, b);
-    fe_cswap(p->Y, q->Y, b);
-    fe_cswap(p->Z, q->Z, b);
-    fe_cswap(p->T, q->T, b);
+    fe_0(p->X);
+    fe_1(p->Y);
+    fe_1(p->Z);
+    fe_0(p->T);
 }
 
 static void ge_tobytes(u8 s[32], const ge *h)
@@ -1383,7 +1449,7 @@ static void ge_tobytes(u8 s[32], const ge *h)
 }
 
 // Variable time! s must not be secret!
-static int ge_frombytes_neg(ge *h, const u8 s[32])
+static int ge_frombytes_neg_vartime(ge *h, const u8 s[32])
 {
     static const fe d = {
         -10913610, 13857413, -15372611, 6949391, 114729,
@@ -1428,133 +1494,331 @@ static int ge_frombytes_neg(ge *h, const u8 s[32])
     return 0;
 }
 
-static const fe D2 = { // - 2 * 121665 / 121666
-    0x2b2f159, 0x1a6e509, 0x22add7a, 0x0d4141d, 0x0038052,
-    0x0f3d130, 0x3407977, 0x19ce331, 0x1c56dff, 0x0901b67
-};
-
-static void ge_add(ge *s, const ge *p, const ge *q)
+static void ge_cache(ge_cached *c, const ge *p)
 {
-    fe a, b, c, d, e, f, g, h;
-    //  A = (Y1-X1) * (Y2-X2)
-    //  B = (Y1+X1) * (Y2+X2)
-    fe_sub(a, p->Y, p->X);  fe_sub(h, q->Y, q->X);  fe_mul(a, a, h);
-    fe_add(b, p->X, p->Y);  fe_add(h, q->X, q->Y);  fe_mul(b, b, h);
-    fe_mul(c, p->T, q->T);  fe_mul(c, c, D2  );  //  C = T1 * k * T2
-    fe_add(d, p->Z, p->Z);  fe_mul(d, d, q->Z);  //  D = Z1 * 2 * Z2
-    fe_sub(e, b, a);     //  E  = B - A
-    fe_sub(f, d, c);     //  F  = D - C
-    fe_add(g, d, c);     //  G  = D + C
-    fe_add(h, b, a);     //  H  = B + A
-    fe_mul(s->X, e, f);  //  X3 = E * F
-    fe_mul(s->Y, g, h);  //  Y3 = G * H
-    fe_mul(s->Z, f, g);  //  Z3 = F * G
-    fe_mul(s->T, e, h);  //  T3 = E * H
-
-    WIPE_BUFFER(a);  WIPE_BUFFER(b);  WIPE_BUFFER(c);  WIPE_BUFFER(d);
-    WIPE_BUFFER(e);  WIPE_BUFFER(f);  WIPE_BUFFER(g);  WIPE_BUFFER(h);
+    static const fe D2 = { // - 2 * 121665 / 121666
+        -21827239, -5839606, -30745221, 13898782, 229458,
+        15978800, -12551817, -6495438, 29715968, 9444199
+    };
+    fe_add (c->Yp, p->Y, p->X);
+    fe_sub (c->Ym, p->Y, p->X);
+    fe_copy(c->Z , p->Z      );
+    fe_mul (c->T2, p->T, D2  );
 }
 
-// could use ge_add() for this, but this is slightly faster
-static void ge_double(ge *s, const ge *p)
+static void ge_add(ge *s, const ge *p, const ge_cached *q)
 {
-    fe a, b, c, d, e, f, g, h;
-    fe_sub(a, p->Y, p->X);  fe_sq(a, a);      //  A = (Y1-X1)^2
-    fe_add(b, p->X, p->Y);  fe_sq(b, b);      //  B = (Y1+X1)^2
-    fe_sq (c, p->T);        fe_mul(c, c, D2); //  C = T1^2 * k
-    fe_sq (d, p->Z);        fe_add(d, d, d);  //  D = Z1^2 * 2
-    fe_sub(e, b, a);                          //  E  = B - A
-    fe_sub(f, d, c);                          //  F  = D - C
-    fe_add(g, d, c);                          //  G  = D + C
-    fe_add(h, b, a);                          //  H  = B + A
-    fe_mul(s->X, e, f);                       //  X3 = E * F
-    fe_mul(s->Y, g, h);                       //  Y3 = G * H
-    fe_mul(s->Z, f, g);                       //  Z3 = F * G
-    fe_mul(s->T, e, h);                       //  T3 = E * H
+    fe a, b; // not used to process secrets, no need to wipe
+    fe_add(a   , p->Y, p->X );
+    fe_sub(b   , p->Y, p->X );
+    fe_mul(a   , a   , q->Yp);
+    fe_mul(b   , b   , q->Ym);
+    fe_add(s->Y, a   , b    );
+    fe_sub(s->X, a   , b    );
 
-    WIPE_BUFFER(a);  WIPE_BUFFER(b);  WIPE_BUFFER(c);  WIPE_BUFFER(d);
-    WIPE_BUFFER(e);  WIPE_BUFFER(f);  WIPE_BUFFER(g);  WIPE_BUFFER(h);
+    fe_add(s->Z, p->Z, p->Z );
+    fe_mul(s->Z, s->Z, q->Z );
+    fe_mul(s->T, p->T, q->T2);
+    fe_add(a   , s->Z, s->T );
+    fe_sub(b   , s->Z, s->T );
+
+    fe_mul(s->T, s->X, s->Y);
+    fe_mul(s->X, s->X, b   );
+    fe_mul(s->Y, s->Y, a   );
+    fe_mul(s->Z, a   , b   );
 }
 
-static void ge_scalarmult(ge *p, const ge *q, const u8 scalar[32])
+static void ge_sub(ge *s, const ge *p, const ge_cached *q)
 {
-    // Simple Montgomery ladder, with straight double and add.
-    ge t;
-    fe_0(p->X);  fe_copy(t.X, q->X);
-    fe_1(p->Y);  fe_copy(t.Y, q->Y);
-    fe_1(p->Z);  fe_copy(t.Z, q->Z);
-    fe_0(p->T);  fe_copy(t.T, q->T);
-    int swap = 0;
-    for (int i = 255; i >= 0; i--) {
-        int b = (scalar[i/8] >> (i & 7)) & 1;
-        swap ^= b;  // xor trick avoids unnecessary swaps
-        ge_cswap(p, &t, swap);
-        swap = b;
-        ge_add(&t, &t, p);
-        ge_double(p, p);
+    ge_cached neg;
+    fe_copy(neg.Ym, q->Yp);
+    fe_copy(neg.Yp, q->Ym);
+    fe_copy(neg.Z , q->Z );
+    fe_neg (neg.T2, q->T2);
+    ge_add(s, p, &neg);
+}
+
+static void ge_madd(ge *s, const ge *p, const fe yp, const fe ym, const fe t2,
+                    fe a, fe b)
+{
+    fe_add(a   , p->Y, p->X );
+    fe_sub(b   , p->Y, p->X );
+    fe_mul(a   , a   , yp   );
+    fe_mul(b   , b   , ym   );
+    fe_add(s->Y, a   , b    );
+    fe_sub(s->X, a   , b    );
+
+    fe_add(s->Z, p->Z, p->Z );
+    fe_mul(s->T, p->T, t2   );
+    fe_add(a   , s->Z, s->T );
+    fe_sub(b   , s->Z, s->T );
+
+    fe_mul(s->T, s->X, s->Y);
+    fe_mul(s->X, s->X, b   );
+    fe_mul(s->Y, s->Y, a   );
+    fe_mul(s->Z, a   , b   );
+}
+
+static void ge_double(ge *s, const ge *p, ge *q)
+{
+    fe_sq (q->X, p->X);
+    fe_sq (q->Y, p->Y);
+    fe_sq2(q->Z, p->Z);
+    fe_add(q->T, p->X, p->Y);
+    fe_sq (s->T, q->T);
+    fe_add(q->T, q->Y, q->X);
+    fe_sub(q->Y, q->Y, q->X);
+    fe_sub(q->X, s->T, q->T);
+    fe_sub(q->Z, q->Z, q->Y);
+
+    fe_mul(s->X, q->X , q->Z);
+    fe_mul(s->Y, q->T , q->Y);
+    fe_mul(s->Z, q->Y , q->Z);
+    fe_mul(s->T, q->X , q->T);
+}
+
+// Compute signed sliding windows (either 0, or odd numbers between -15 and 15)
+static void slide(i8 adds[258], const u8 scalar[32])
+{
+    FOR (i,   0, 256) { adds[i] = scalar_bit(scalar, i); }
+    FOR (i, 256, 258) { adds[i] = 0;                     }
+    FOR (i, 0, 254) {
+        if (adds[i] != 0) {
+            // base value of the 5-bit window
+            FOR (j, 1, 5) {
+                adds[i  ] |= adds[i+j] << j;
+                adds[i+j]  = 0;
+            }
+            if (adds[i] > 16) {
+                // go back to [-15, 15], propagate carry.
+                adds[i] -= 32;
+                int j = i + 5;
+                while (adds[j] != 0) {
+                    adds[j] = 0;
+                    j++;
+                }
+                adds[j] = 1;
+            }
+        }
     }
-    // one last swap makes up for the xor trick
-    ge_cswap(p, &t, swap);
-
-    WIPE_CTX(&t);
 }
+
+// Look up table for sliding windows
+static void ge_precompute(ge_cached lut[8], const ge *P1)
+{
+    ge P2, tmp;
+    ge_double(&P2, P1, &tmp);
+    ge_cache(&lut[0], P1);
+    FOR (i, 0, 7) {
+        ge_add(&tmp, &P2, &lut[i]);
+        ge_cache(&lut[i+1], &tmp);
+    }
+}
+
+// Could be a function, but the macro avoids some overhead.
+#define LUT_ADD(sum, lut, adds, i)                             \
+    if (adds[i] > 0) { ge_add(sum, sum, &lut[ adds[i] / 2]); } \
+    if (adds[i] < 0) { ge_sub(sum, sum, &lut[-adds[i] / 2]); }
+
+// Variable time! P, sP, and sB must not be secret!
+static void ge_double_scalarmult_vartime(ge *sum, const ge *P,
+                                         u8 p[32], u8 b[32])
+{
+    static const fe X = { -14297830, -7645148, 16144683, -16471763, 27570974,
+                          -2696100, -26142465, 8378389, 20764389, 8758491 };
+    static const fe Y = { -26843541, -6710886, 13421773, -13421773, 26843546,
+                          6710886, -13421773, 13421773, -26843546, -6710886 };
+    ge B;
+    fe_copy(B.X, X);
+    fe_copy(B.Y, Y);
+    fe_1   (B.Z);
+    fe_mul (B.T, X, Y);
+
+    // cached points for addition
+    ge_cached cP[8];  ge_precompute(cP,  P);
+    ge_cached cB[8];  ge_precompute(cB, &B);
+    i8 p_adds[258];   slide(p_adds, p);
+    i8 b_adds[258];   slide(b_adds, b);
+
+    // Avoid the first doublings
+    int i = 253;
+    while (i >= 0         &&
+           p_adds[i] == 0 &&
+           b_adds[i] == 0) {
+        i--;
+    }
+
+    // Merged double and add ladder
+    ge_zero(sum);
+    LUT_ADD(sum, cP, p_adds, i);
+    LUT_ADD(sum, cB, b_adds, i);
+    i--;
+    while (i >= 0) {
+        ge_double(sum, sum, &B); // B is no longer used, we can overwrite it
+        LUT_ADD(sum, cP, p_adds, i);
+        LUT_ADD(sum, cB, b_adds, i);
+        i--;
+    }
+}
+
+// 5-bit signed comb in cached format (Niels coordinates, Z=1)
+static const fe comb_Yp[16] = {
+    {2615675, 9989699, 17617367, -13953520, -8802803,
+     1447286, -8909978, -270892, -12199203, -11617247},
+    {-1271192, 4785266, -29856067, -6036322, -10435381,
+     15493337, 20321440, -6036064, 15902131, 13420909},
+    {-26170888, -12891603, 9568996, -6197816, 26424622,
+     16308973, -4518568, -3771275, -15522557, 3991142},
+    {-25875044, 1958396, 19442242, -9809943, -26099408,
+     -18589, -30794750, -14100910, 4971028, -10535388},
+    {-13896937, -7357727, -12131124, 617289, -33188817,
+     10080542, 6402555, 10779157, 1176712, 2472642},
+    {71503, 12662254, -17008072, -8370006, 23408384,
+     -12897959, 32287612, 11241906, -16724175, 15336924},
+    {27397666, 4059848, 23573959, 8868915, -10602416,
+     -10456346, -22812831, -9666299, 31810345, -2695469},
+    {-3418193, -694531, 2320482, -11850408, -1981947,
+     -9606132, 23743894, 3933038, -25004889, -4478918},
+    {-4448372, 5537982, -4805580, 14016777, 15544316,
+     16039459, -7143453, -8003716, -21904564, 8443777},
+    {32495180, 15749868, 2195406, -15542321, -3213890,
+     -4030779, -2915317, 12751449, -1872493, 11926798},
+    {26779741, 12553580, -24344000, -4071926, -19447556,
+     -13464636, 21989468, 7826656, -17344881, 10055954},
+    {5848288, -1639207, -10452929, -11760637, 6484174,
+     -5895268, -11561603, 587105, -19220796, 14378222},
+    {32050187, 12536702, 9206308, -10016828, -13333241,
+     -4276403, -24225594, 14562479, -31803624, -9967812},
+    {23536033, -6219361, 199701, 4574817, 30045793,
+     7163081, -2244033, 883497, 10960746, -14779481},
+    {-8143354, -11558749, 15772067, 14293390, 5914956,
+     -16702904, -7410985, 7536196, 6155087, 16571424},
+    {6211591, -11166015, 24568352, 2768318, -10822221,
+     11922793, 33211827, 3852290, -13160369, -8855385},
+};
+static const fe comb_Ym[16] = {
+    {8873912, 14981221, 13714139, 6923085, 25481101,
+     4243739, 4646647, -203847, 9015725, -16205935},
+    {-1827892, 15407265, 2351140, -11810728, 28403158,
+     -1487103, -15057287, -4656433, -3780118, -1145998},
+    {-30623162, -11845055, -11327147, -16008347, 17564978,
+     -1449578, -20580262, 14113978, 29643661, 15580734},
+    {-15109423, 13348938, -14756006, 14132355, 30481360,
+     1830723, -240510, 9371801, -13907882, 8024264},
+    {25119567, 5628696, 10185251, -9279452, 683770,
+     -14523112, -7982879, -16450545, 1431333, -13253541},
+    {-8390493, 1276691, 19008763, -12736675, -9249429,
+     -12526388, 17434195, -13761261, 18962694, -1227728},
+    {26361856, -12366343, 8941415, 15163068, 7069802,
+     -7240693, -18656349, 8167008, 31106064, -1670658},
+    {-5677136, -11012483, -1246680, -6422709, 14772010,
+     1829629, -11724154, -15914279, -18177362, 1301444},
+    {937094, 12383516, -22597284, 7580462, -18767748,
+     13813292, -2323566, 13503298, 11510849, -10561992},
+    {28028043, 14715827, -6558532, -1773240, 27563607,
+     -9374554, 3201863, 8865591, -16953001, 7659464},
+    {13628467, 5701368, 4674031, 11935670, 11461401,
+     10699118, 31846435, -114971, -8269924, -14777505},
+    {-22124018, -12859127, 11966893, 1617732, 30972446,
+     -14350095, -21822286, 8369862, -29443219, -15378798},
+    {290131, -471434, 8840522, -2654851, 25963762,
+     -11578288, -7227978, 13847103, 30641797, 6003514},
+    {-23547482, -11475166, -11913550, 9374455, 22813401,
+     -5707910, 26635288, 9199956, 20574690, 2061147},
+    {9715324, 7036821, -17981446, -11505533, 26555178,
+     -3571571, 5697062, -14128022, 2795223, 9694380},
+    {14864569, -6319076, -3080, -8151104, 4994948,
+     -1572144, -41927, 9269803, 13881712, -13439497},
+};
+static const fe comb_T2[16] = {
+    {-18494317, 2686822, 18449263, -13905325, 5966562,
+     -3368714, 2738304, -8583315, 15987143, 12180258},
+    {-33336513, -13705917, -18473364, -5039204, -4268481,
+     -4136039, -8192211, -2935105, -19354402, 5995895},
+    {-19753139, -1729018, 21880604, 13471713, 28315373,
+     -8530159, -17492688, 11730577, -8790216, 3942124},
+    {17278020, 3905045, 29577748, 11151940, 18451761,
+     -6801382, 31480073, -13819665, 26308905, 10868496},
+    {26937294, 3313561, 28601532, -3497112, -22814130,
+     11073654, 8956359, -16757370, 13465868, 16623983},
+    {-5468054, 6059101, -31275300, 2469124, 26532937,
+     8152142, 6423741, -11427054, -15537747, -10938247},
+    {-11303505, -9659620, -12354748, -9331434, 19501116,
+     -9146390, -841918, -5315657, 8903828, 8839982},
+    {16603354, -215859, 1591180, 3775832, -705596,
+     -13913449, 26574704, 14963118, 19649719, 6562441},
+    {33188866, -12232360, -24929148, -6133828, 21818432,
+     11040754, -3041582, -3524558, -29364727, -10264096},
+    {-20704194, -12560423, -1235774, -785473, 13240395,
+     4831780, -472624, -3796899, 25480903, -15422283},
+    {-2204347, -16313180, -21388048, 7520851, -8697745,
+     -14460961, 20894017, 12210317, -475249, -2319102},
+    {-16407882, 4940236, -21194947, 10781753, 22248400,
+     14425368, 14866511, -7552907, 12148703, -7885797},
+    {16376744, 15908865, -30663553, 4663134, -30882819,
+     -10105163, 19294784, -10800440, -33259252, 2563437},
+    {30208741, 11594088, -15145888, 15073872, 5279309,
+     -9651774, 8273234, 4796404, -31270809, -13316433},
+    {-17802574, 14455251, 27149077, -7832700, -29163160,
+     -7246767, 17498491, -4216079, 31788733, -14027536},
+    {-25233439, -9389070, -6618212, -3268087, -521386,
+     -7350198, 21035059, -14970947, 25910190, 11122681},
+};
 
 static void ge_scalarmult_base(ge *p, const u8 scalar[32])
 {
-    // Calls the general ge_scalarmult() with the base point.
-    // Other implementations use a precomputed table, but it
-    // takes way too much code.
-    static const fe X = {
-        0x325d51a, 0x18b5823, 0x0f6592a, 0x104a92d, 0x1a4b31d,
-        0x1d6dc5c, 0x27118fe, 0x07fd814, 0x13cd6e5, 0x085a4db};
-    static const fe Y = {
-        0x2666658, 0x1999999, 0x0cccccc, 0x1333333, 0x1999999,
-        0x0666666, 0x3333333, 0x0cccccc, 0x2666666, 0x1999999};
-    ge base_point;
-    ge_from_xy(&base_point, X, Y);
-    ge_scalarmult(p, &base_point, scalar);
-}
+    // 5-bits signed comb, from Mike Hamburg's
+    // Fast and compact elliptic-curve cryptography (2012)
+    static const u8 half_mod_L[32] = { // 1 / 2 modulo L
+        0xf7, 0xe9, 0x7a, 0x2e, 0x8d, 0x31, 0x09, 0x2c,
+        0x6b, 0xce, 0x7b, 0x51, 0xef, 0x7c, 0x6f, 0x0a,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+    };
+    static const u8 half_ones[32] = { // (2^255 - 1) / 2 modulo L
+        0x42, 0x9a, 0xa3, 0xba, 0x23, 0xa5, 0xbf, 0xcb,
+        0x11, 0x5b, 0x9d, 0xc5, 0x74, 0x95, 0xf3, 0xb6,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x07,
+    };
+    // All bits set form: 1 means 1, 0 means -1
+    u8 s_scalar[32];
+    mul_add(s_scalar, scalar, half_mod_L, half_ones);
 
-static void modL(u8 *r, i64 x[64])
-{
-    static const  u64 L[32] = { 0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58,
-                                0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14,
-                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10};
-    for (unsigned i = 63; i >= 32; i--) {
-        i64 carry = 0;
-        FOR (j, i-32, i-12) {
-            x[j] += carry - 16 * x[i] * L[j - (i - 32)];
-            carry = (x[j] + 128) >> 8;
-            x[j] -= carry * (1 << 8);
+    // Double and add ladder
+    fe yp, ym, t2, n2, a, b; // temporaries for addition
+    ge dbl;                  // temporary for doublings
+    ge_zero(p);
+    for (int i = 50; i >= 0; i--) {
+        if (i < 50) {
+            ge_double(p, p, &dbl);
         }
-        x[i-12] += carry;
-        x[i] = 0;
-    }
-    i64 carry = 0;
-    FOR (i, 0, 32) {
-        x[i] += carry - (x[31] >> 4) * L[i];
-        carry = x[i] >> 8;
-        x[i] &= 255;
-    }
-    FOR (i, 0, 32) {
-        x[i] -= carry * L[i];
-    }
-    FOR (i, 0, 32) {
-        x[i+1] += x[i] >> 8;
-        r[i  ]  = x[i] & 255;
-    }
-}
+        fe_1(yp);
+        fe_1(ym);
+        fe_0(t2);
+        u8 teeth =  scalar_bit(s_scalar, i)
+            +      (scalar_bit(s_scalar, i +  51) << 1)
+            +      (scalar_bit(s_scalar, i + 102) << 2)
+            +      (scalar_bit(s_scalar, i + 153) << 3)
+            +      (scalar_bit(s_scalar, i + 204) << 4);
+        u8 high  = teeth >> 4;
+        u8 index = (teeth ^ (high - 1)) & 15;
+        FOR (j, 0, 16) {
+            i32 select = 1 & (((j ^ index) - 1) >> 8);
+            fe_ccopy(yp, comb_Yp[j], select);
+            fe_ccopy(ym, comb_Ym[j], select);
+            fe_ccopy(t2, comb_T2[j], select);
+        }
 
-static void reduce(u8 r[64])
-{
-    i64 x[64];
-    FOR (i, 0, 64) {
-        x[i] = (u64) r[i];
-        r[i] = 0;
+        fe_neg(n2, t2);
+        fe_cswap(t2, n2, high);
+        fe_cswap(yp, ym, high);
+        ge_madd(p, p, ym, yp, n2, a, b);
     }
-    modL(r, x);
-    WIPE_BUFFER(x);
+    WIPE_CTX(&dbl);
+    WIPE_BUFFER(a);  WIPE_BUFFER(yp);  WIPE_BUFFER(t2);
+    WIPE_BUFFER(b);  WIPE_BUFFER(ym);  WIPE_BUFFER(n2);
+    WIPE_BUFFER(s_scalar);
 }
 
 void crypto_sign_public_key(u8       public_key[32],
@@ -1628,23 +1892,12 @@ void crypto_sign_final(crypto_sign_ctx *ctx, u8 signature[64])
     u8 h_ram[64];
     HASH_FINAL(&ctx->hash, h_ram);
     reduce(h_ram);  // reduce the hash modulo L
-
-    i64 s[64]; // s = r + h_ram * a
-    FOR (i,  0, 32) { s[i] = (u64) r[i]; }
-    FOR (i, 32, 64) { s[i] = 0;          }
-    FOR (i,  0, 32) {
-        FOR (j, 0, 32) {
-            s[i+j] += h_ram[i] * (u64) a[j];
-        }
-    }
     FOR (i, 0, 32) {
         signature[i] = half_sig[i];
     }
-    modL(signature + 32, s);  // second half of the signature = s
-
+    mul_add(signature + 32, h_ram, a, r); // s = h_ram * a + r
     WIPE_CTX(ctx);
     WIPE_BUFFER(h_ram);
-    WIPE_BUFFER(s);
 }
 
 void crypto_sign(u8        signature[64],
@@ -1678,18 +1931,19 @@ void crypto_check_update(crypto_check_ctx *ctx, const u8 *msg, size_t msg_size)
 
 int crypto_check_final(crypto_check_ctx *ctx)
 {
-    ge p, sB, diff, A;
+    ge diff, A;
     u8 h_ram[64], R_check[32];
-    if (ge_frombytes_neg(&A, ctx->pk)) {       // -A
+    u8 *s = ctx->sig + 32;                       // s
+    u8 *R = ctx->sig;                            // R
+    if (ge_frombytes_neg_vartime(&A, ctx->pk) ||
+        is_above_L(s)) { // prevent s malleability
         return -1;
     }
     HASH_FINAL(&ctx->hash, h_ram);
     reduce(h_ram);
-    ge_scalarmult(&p, &A, h_ram);              // p    = -A*h_ram
-    ge_scalarmult_base(&sB, ctx->sig + 32);
-    ge_add(&diff, &p, &sB);                    // diff = s - A*h_ram
-    ge_tobytes(R_check, &diff);
-    return crypto_verify32(ctx->sig, R_check); // R == s - A*h_ram ? OK : fail
+    ge_double_scalarmult_vartime(&diff, &A, h_ram, s);
+    ge_tobytes(R_check, &diff);                  // R_check = s*B - h_ram*A
+    return crypto_verify32(R, R_check);          // R == R_check ? OK : fail
     // No secret, no wipe
 }
 
@@ -2088,6 +2342,12 @@ CAMLprim value caml_monocypher_crypto_check_final(value ctx) {
     return Val_int(crypto_check_final(Caml_ba_data_val(ctx)));
 }
 
+CAMLprim value caml_monocypher_ge_cache(value cached, value ge) {
+    ge_cache(Caml_ba_data_val(cached),
+             Caml_ba_data_val(ge));
+    return Val_unit;
+}
+
 // Variable time! s must not be secret!
 static int ge_frombytes(ge *h, const u8 s[32])
 {
@@ -2152,10 +2412,11 @@ CAMLprim value caml_monocypher_ge_add(value s, value p, value q) {
     return Val_unit;
 }
 
-CAMLprim value caml_monocypher_ge_scalarmult(value p, value q, value scalar) {
-    ge_scalarmult(Caml_ba_data_val(p),
-                  Caml_ba_data_val(q),
-                  Caml_ba_data_val(scalar));
+CAMLprim value caml_monocypher_ge_double_scalarmult(value p, value q, value s1, value s2) {
+    ge_double_scalarmult_vartime(Caml_ba_data_val(p),
+                                 Caml_ba_data_val(q),
+                                 Caml_ba_data_val(s1),
+                                 Caml_ba_data_val(s2));
     return Val_unit;
 }
 

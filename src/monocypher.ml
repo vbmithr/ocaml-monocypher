@@ -515,12 +515,21 @@ end
 
 module Ed25519 = struct
   type t = Bigstring.t
+  type cached = Bigstring.t
 
   let bytes = 32
   let fe_bytes = 10 * 4
   let ge_bytes = 4 * fe_bytes
 
   let copy = Bigstring.copy
+
+  external cache : Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_ge_cache" [@@noalloc]
+
+  let cache t =
+    let cached = Bigstring.create ge_bytes in
+    cache cached t ;
+    cached
 
   external of_bytes : Bigstring.t -> Bigstring.t -> int =
     "caml_monocypher_ge_frombytes" [@@noalloc]
@@ -564,8 +573,9 @@ module Ed25519 = struct
   external add : t -> t -> t -> unit =
     "caml_monocypher_ge_add" [@@noalloc]
 
-  external scalarmult : t -> t -> Bigstring.t -> unit =
-    "caml_monocypher_ge_scalarmult" [@@noalloc]
+  external double_scalarmult :
+    t -> t -> Bigstring.t -> Bigstring.t -> unit =
+    "caml_monocypher_ge_double_scalarmult" [@@noalloc]
 
   external scalarmult_base : t -> Bigstring.t -> unit =
     "caml_monocypher_ge_scalarmult_base" [@@noalloc]
@@ -585,9 +595,19 @@ module Ed25519 = struct
 
   let scalarmult p z =
     let ge = Bigstring.create ge_bytes in
-    let z_buf = Bigstring.create 32 in
-    blit_z z z_buf ;
-    scalarmult ge p z_buf ;
+    let z1_buf = Bigstring.create 32 in
+    let z2_buf = Bigstring.make 32 '\x00' in
+    blit_z z z1_buf ;
+    double_scalarmult ge p z1_buf z2_buf ;
+    ge
+
+  let double_scalarmult p z1 z2 =
+    let ge = Bigstring.create ge_bytes in
+    let z1_buf = Bigstring.create 32 in
+    let z2_buf = Bigstring.create 32 in
+    blit_z z1 z1_buf ;
+    blit_z z2 z2_buf ;
+    double_scalarmult ge p z1_buf z2_buf ;
     ge
 
   let scalarmult_base z =
