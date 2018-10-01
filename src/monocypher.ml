@@ -225,9 +225,9 @@ module DH = struct
 
   let equal : type a. a key -> a key -> bool = fun a b ->
     match a, b with
-    | K a, K b -> Bigstring.equal a b
-    | Sk a, Sk b -> Bigstring.equal a b
-    | Pk a, Pk b -> Bigstring.equal a b
+    | K a, K b -> equal32 a b
+    | Sk a, Sk b -> equal32 a b
+    | Pk a, Pk b -> equal32 a b
 
   let neuterize : type a. a key -> public key = function
     | K _ -> invalid_arg "DH.neuterize: shared key cannot be neuterized"
@@ -356,9 +356,9 @@ module Sign = struct
 
   let equal : type a. a key -> a key -> bool = fun a b ->
     match a, b with
-    | Sk a, Sk b -> Bigstring.equal a b
-    | Pk a, Pk b -> Bigstring.equal a b
-    | Ek a, Ek b -> Bigstring.equal a b
+    | Sk a, Sk b -> equal32 a b
+    | Pk a, Pk b -> equal32 a b
+    | Ek a, Ek b -> equal64 a b
 
   let buffer : type a. a key -> Bigstring.t = function
     | Sk buf -> buf
@@ -559,7 +559,7 @@ module Ed25519 = struct
     buf
 
   let equal a b =
-    Bigstring.equal (to_bytes a) (to_bytes b)
+    equal32 (to_bytes a) (to_bytes b)
 
   external add : t -> t -> t -> unit =
     "caml_monocypher_ge_add" [@@noalloc]
