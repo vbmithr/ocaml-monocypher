@@ -5,4 +5,3 @@ tmp
 \#*#
 *.install
 **/*.merlin
-dune-project
