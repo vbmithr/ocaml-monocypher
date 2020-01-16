@@ -1,0 +1,20 @@
+opam-version: "2.0"
+authors: "Vincent Bernardoff <vb@luminar.eu.org>"
+maintainer: "Vincent Bernardoff <vb@luminar.eu.org>"
+homepage: "https://github.com/vbmithr/ocaml-monocypher"
+bug-reports: "https://github.com/vbmithr/ocaml-monocypher/issues"
+dev-repo: "git+https://github.com/vbmithr/ocaml-monocypher"
+doc: "https://vbmithr.github.io/ocaml-monocypher/doc"
+build: [ "dune" "build" "-j" jobs "-p" name ]
+run-test: [ "dune" "runtest" "-j" jobs "-p" name ]
+depends: [
+  "dune" {>= "1.11.4"}
+  "gen" {>= "0.5.2"}
+  "bigstring" {>= "0.2"}
+  "zarith" {>= "1.9.1"}
+  "hex" {with-test & >= "1.4.0"}
+  "alcotest" {with-test & >= "0.8.5"}
+]
+synopsis: "Boring crypto that simply works"
+description: """
+"""
