@@ -2,5 +2,5 @@
  (name            monocypher)
  (public_name     monocypher)
  (libraries       gen bigstring zarith)
- (c_names         sha512 monocypher_stubs)
- (c_flags         -DED25519_SHA512 -O3))
+ (c_names         monocypher-ed25519 monocypher_stubs)
+ (c_flags         -O3))

@@ -197,7 +197,7 @@ module DH = struct
   external neuterize : Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_key_exchange_public_key" [@@noalloc]
 
-  external exchange : Bigstring.t -> Bigstring.t -> Bigstring.t -> int =
+  external exchange : Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_key_exchange" [@@noalloc]
 
   type shared
@@ -248,14 +248,8 @@ module DH = struct
 
   let shared (Sk sk) (Pk pk) =
     let k = Bigstring.create bytes in
-    match exchange k sk pk with
-    | 0 -> Some (K k)
-    | _ -> None
-
-  let shared_exn sk pk =
-    match shared sk pk with
-    | None -> invalid_arg "DH.shared_exn"
-    | Some k -> k
+    exchange k sk pk ;
+    K k
 
   let blit : type a. a key -> Bigstring.t -> int -> int = fun k buf pos ->
     begin match k with
@@ -306,7 +300,7 @@ end
 
 module Sign = struct
   external neuterize : Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_public_key" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_public_key" [@@noalloc]
 
   external neuterize_extended : Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_crypto_sign_public_key_extended" [@@noalloc]
@@ -322,32 +316,32 @@ module Sign = struct
 
   external sign_init_first_pass :
     Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_init_first_pass" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_sign_init_first_pass" [@@noalloc]
 
   external sign_init_first_pass_extended :
     Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_init_first_pass_extended" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_sign_init_first_pass_extended" [@@noalloc]
 
   external sign_init_second_pass :
     Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_init_second_pass" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_sign_init_second_pass" [@@noalloc]
 
   external sign_update :
     Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_update" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_sign_update" [@@noalloc]
 
   external sign_final :
     Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_sign_final" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_sign_final" [@@noalloc]
 
   external check_init : Bigstring.t -> Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_check_init" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_check_init" [@@noalloc]
 
   external check_update : Bigstring.t -> Bigstring.t -> unit =
-    "caml_monocypher_crypto_check_update" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_check_update" [@@noalloc]
 
   external check_final : Bigstring.t -> int =
-    "caml_monocypher_crypto_check_final" [@@noalloc]
+    "caml_monocypher_crypto_ed25519_check_final" [@@noalloc]
 
   type _ key =
     | Sk : Bigstring.t -> secret key
@@ -574,7 +568,7 @@ module Ed25519 = struct
     "caml_monocypher_ge_add" [@@noalloc]
 
   external double_scalarmult :
-    t -> t -> Bigstring.t -> Bigstring.t -> unit =
+    t -> Bigstring.t -> Bigstring.t -> unit =
     "caml_monocypher_ge_double_scalarmult" [@@noalloc]
 
   external scalarmult_base : t -> Bigstring.t -> unit =
@@ -594,21 +588,17 @@ module Ed25519 = struct
     Bigstring.blit_of_string bits 0 buf 0 (String.length bits)
 
   let scalarmult p z =
-    let ge = Bigstring.create ge_bytes in
     let z1_buf = Bigstring.create 32 in
     let z2_buf = Bigstring.make 32 '\x00' in
     blit_z z z1_buf ;
-    double_scalarmult ge p z1_buf z2_buf ;
-    ge
+    double_scalarmult p z1_buf z2_buf
 
   let double_scalarmult p z1 z2 =
-    let ge = Bigstring.create ge_bytes in
     let z1_buf = Bigstring.create 32 in
     let z2_buf = Bigstring.create 32 in
     blit_z z1 z1_buf ;
     blit_z z2 z2_buf ;
-    double_scalarmult ge p z1_buf z2_buf ;
-    ge
+    double_scalarmult p z1_buf z2_buf
 
   let scalarmult_base z =
     let ge = Bigstring.create ge_bytes in

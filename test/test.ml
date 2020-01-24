@@ -97,8 +97,8 @@ let test_dh () =
   let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
   let pk = DH.neuterize sk in
   let pk2 = DH.neuterize sk2 in
-  let k = DH.shared_exn sk pk2 in
-  let k2 = DH.shared_exn sk2 pk in
+  let k = DH.shared sk pk2 in
+  let k2 = DH.shared sk2 pk in
   Alcotest.(check bool "dh" true DH.(equal k k2))
 
 let msg = Bigstring.of_string "Voulez-vous coucher avec moi, ce soir ?"
@@ -108,7 +108,7 @@ let test_box () =
   let sk = DH.sk_of_bytes (Rand.gen DH.bytes) in
   let sk2 = DH.sk_of_bytes (Rand.gen DH.bytes) in
   let pk2 = DH.neuterize sk2 in
-  let k = DH.shared_exn sk pk2 in
+  let k = DH.shared sk pk2 in
   let key = DH.buffer k in
   let buf = Bigstring.copy msg in
   let mac = Bigstring.create Box.macbytes in
@@ -177,15 +177,17 @@ let test_assoc () =
 
 let test_arith () =
   let pk = Ed25519.of_pk Sign.(neuterize (sk_of_bytes (Rand.gen skbytes))) in
-  let pk2 = Ed25519.scalarmult pk (Z.of_int 3) in
-  let pk2' = Ed25519.(add (add pk (cache pk)) (cache pk)) in
-  Alcotest.(check bool "arith2" true (Ed25519.equal pk2 pk2'))
+  let pk_times_3 = Ed25519.copy pk in
+  Ed25519.scalarmult pk_times_3 (Z.of_int 3) ;
+  let pk_cached = Ed25519.cache pk in
+  let pk2 = Ed25519.(add (add pk pk_cached) pk_cached) in
+  Alcotest.(check bool "arith2" true (Ed25519.equal pk_times_3 pk2))
 
 let test_arith2 () =
   let a = Ed25519.scalarmult_base (Z.of_int 3) in
-  let b = Ed25519.scalarmult a (Z.of_int 2) in
-  let b' = Ed25519.scalarmult_base (Z.of_int 6) in
-  Alcotest.(check bool "arith2" true (Ed25519.equal b b'))
+  Ed25519.scalarmult a (Z.of_int 2) ;
+  let b = Ed25519.scalarmult_base (Z.of_int 6) in
+  Alcotest.(check bool "arith2" true (Ed25519.equal a b))
 
 let basic = [
   "Rand.gen", `Quick, test_rand_gen ;

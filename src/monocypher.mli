@@ -73,8 +73,7 @@ module DH : sig
   val copy : 'a key -> 'a key
   val sk_of_bytes : ?pos:int -> Bigstring.t -> secret key
   val neuterize : _ key -> public key
-  val shared : secret key -> public key -> shared key option
-  val shared_exn : secret key -> public key -> shared key
+  val shared : secret key -> public key -> shared key
   val wipe : _ key -> unit
 
   val buffer : _ key -> Bigstring.t
@@ -176,9 +175,9 @@ module Ed25519 : sig
       serialization in it. *)
 
   val add : t -> cached -> t
-  val scalarmult : t -> Z.t -> t
+  val scalarmult : t -> Z.t -> unit
 
-  val double_scalarmult : t -> Z.t -> Z.t -> t
+  val double_scalarmult : t -> Z.t -> Z.t -> unit
   (** [double_scalarmult t a b] is [at + bB] where B is the curve's
       base point. *)
 
